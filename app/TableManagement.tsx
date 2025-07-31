@@ -34,6 +34,8 @@ export default function TableManagement() {
   const [filterStatus, setFilterStatus] = useState<TableStatus | "all">("all");
   const [showTableModal, setShowTableModal] = useState(false);
   const [showAssignModal, setShowAssignModal] = useState(false);
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [paymentAmount, setPaymentAmount] = useState('');
   const [selectedDiners, setSelectedDiners] = useState(2);
   const [manualDiners, setManualDiners] = useState('');
   const [showManualInput, setShowManualInput] = useState(false);
@@ -269,6 +271,34 @@ export default function TableManagement() {
     setSelectedTableForMenu(tableId);
     setIsModifyingOrder(true);
     setCurrentView('menu');
+  };
+
+  const handlePaymentRequest = (table: Table) => {
+    setSelectedTable(table);
+    setPaymentAmount('');
+    setShowTableModal(false);
+    setShowPaymentModal(true);
+  };
+
+  const handlePartialPayment = () => {
+    if (selectedTable && paymentAmount) {
+      const amount = parseFloat(paymentAmount);
+      const pendingAmount = (selectedTable.orderTotal || 0) - (selectedTable.paidAmount || 0);
+      
+      if (amount > 0 && amount <= pendingAmount) {
+        processPayment(selectedTable.id, amount, false);
+        setShowPaymentModal(false);
+        setPaymentAmount('');
+      }
+    }
+  };
+
+  const handleFullPayment = () => {
+    if (selectedTable) {
+      processPayment(selectedTable.id, selectedTable.orderTotal || 0, true);
+      setShowPaymentModal(false);
+      setPaymentAmount('');
+    }
   };
 
   const handleConfirmOrder = (items: any[]) => {
@@ -655,8 +685,7 @@ export default function TableManagement() {
                   <Button
                     title="Procesar pago"
                     onPress={() => {
-                      setShowTableModal(false);
-                      processPayment(selectedTable.id, selectedTable.orderTotal || 0, true);
+                      handlePaymentRequest(selectedTable);
                     }}
                     variant="outline"
                     icon={<View><Ionicons name="card" size={16} color="#374151" /></View>}
@@ -753,6 +782,61 @@ export default function TableManagement() {
             />
           </View>
         </View>
+      </Modal>
+
+      {/* Modal de pago */}
+      <Modal
+        visible={showPaymentModal}
+        onClose={() => setShowPaymentModal(false)}
+        title={selectedTable ? `Procesar pago - Mesa ${selectedTable.id}` : "Procesar pago"}
+      >
+        {selectedTable && (
+          <View style={styles.paymentModalContent}>
+            <View style={styles.paymentInfo}>
+              <Text style={styles.paymentInfoText}>
+                <Text style={styles.paymentLabel}>Total de la cuenta:</Text> €{selectedTable.orderTotal?.toFixed(2)}
+              </Text>
+              {selectedTable.paidAmount && (
+                <Text style={styles.paymentInfoText}>
+                  <Text style={styles.paymentLabel}>Ya pagado:</Text> €{selectedTable.paidAmount.toFixed(2)}
+                </Text>
+              )}
+              <Text style={styles.paymentInfoText}>
+                <Text style={styles.paymentLabel}>Pendiente:</Text> €{((selectedTable.orderTotal || 0) - (selectedTable.paidAmount || 0)).toFixed(2)}
+              </Text>
+            </View>
+
+            <View style={styles.paymentOptions}>
+              <Text style={styles.paymentOptionsTitle}>Opciones de pago:</Text>
+              
+              <Button
+                title="Pago completo"
+                onPress={handleFullPayment}
+                style={StyleSheet.flatten([styles.paymentButton, styles.fullPaymentButton])}
+                icon={<View><Ionicons name="card" size={16} color="#ffffff" /></View>}
+              />
+
+              <View style={styles.partialPaymentSection}>
+                <Text style={styles.partialPaymentLabel}>Pago parcial:</Text>
+                <TextInput
+                  style={styles.paymentInput}
+                  value={paymentAmount}
+                  onChangeText={setPaymentAmount}
+                  placeholder={`Máximo: €${((selectedTable.orderTotal || 0) - (selectedTable.paidAmount || 0)).toFixed(2)}`}
+                  keyboardType="numeric"
+                />
+                <Button
+                  title="Confirmar pago parcial"
+                  onPress={handlePartialPayment}
+                  variant="outline"
+                  disabled={!paymentAmount || parseFloat(paymentAmount) <= 0 || parseFloat(paymentAmount) > ((selectedTable.orderTotal || 0) - (selectedTable.paidAmount || 0))}
+                  style={styles.paymentButton}
+                  icon={<View><Ionicons name="cash" size={16} color="#374151" /></View>}
+                />
+              </View>
+            </View>
+          </View>
+        )}
       </Modal>
     </SafeAreaView>
   );
@@ -932,7 +1016,7 @@ const styles = StyleSheet.create({
     borderWidth: 2,
   },
   modalContent: {
-    gap: 24,
+    gap: 16,
   },
   tableInfo: {
     gap: 8,
@@ -979,7 +1063,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   assignModalContent: {
-    gap: 24,
+    gap: 16,
   },
   assignText: {
     fontSize: isTablet ? 18 : 16,
@@ -1047,5 +1131,58 @@ const styles = StyleSheet.create({
     backgroundColor: '#fef3c7',
     borderColor: '#fcd34d',
     borderWidth: 1,
+  },
+  paymentModalContent: {
+    gap: 16,
+  },
+  paymentInfo: {
+    gap: 4,
+  },
+  paymentInfoText: {
+    fontSize: isTablet ? 16 : 14,
+    color: '#374151',
+  },
+  paymentLabel: {
+    fontWeight: '600',
+  },
+  paymentOptions: {
+    gap: 12,
+  },
+  paymentOptionsTitle: {
+    fontSize: isTablet ? 18 : 16,
+    fontWeight: '600',
+    color: '#374151',
+    marginBottom: 4,
+  },
+  paymentButton: {
+    marginBottom: 4,
+  },
+  fullPaymentButton: {
+    paddingVertical: 12,
+    minHeight: 48,
+    width: '70%',
+    alignSelf: 'center',
+  },
+  partialPaymentSection: {
+    gap: 8,
+    alignItems: 'center',
+  },
+  partialPaymentLabel: {
+    fontSize: isTablet ? 16 : 14,
+    fontWeight: '600',
+    color: '#374151',
+    marginBottom: 4,
+  },
+  paymentInput: {
+    fontSize: isTablet ? 16 : 14,
+    color: '#111827',
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    borderRadius: 8,
+    backgroundColor: '#ffffff',
+    width: '60%',
+    textAlign: 'center',
   },
 }); 

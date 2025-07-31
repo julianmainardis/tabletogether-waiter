@@ -28,6 +28,7 @@ export const Modal: React.FC<ModalProps> = ({ visible, onClose, title, children 
         >
           {title && (
             <View style={styles.header}>
+              <View style={styles.closeButtonPlaceholder} />
               <Text style={styles.title}>{title}</Text>
               <TouchableOpacity onPress={onClose} style={styles.closeButton}>
                 <Text style={styles.closeText}>✕</Text>
@@ -55,7 +56,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     margin: 20,
     maxHeight: '80%',
-    width: '70%',
+    width: '60%',
     shadowColor: '#000',
     shadowOffset: {
       width: 0,
@@ -69,23 +70,32 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 16,
+    padding: 12,
     borderBottomWidth: 1,
     borderBottomColor: '#f3f4f6',
+  },
+  closeButtonPlaceholder: {
+    width: 32,
   },
   title: {
     fontSize: 18,
     fontWeight: '600',
     color: '#1f2937',
+    flex: 1,
+    textAlign: 'center',
   },
   closeButton: {
     padding: 4,
+    width: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   closeText: {
-    fontSize: 20,
+    fontSize: 18,
     color: '#6b7280',
+    fontWeight: 'bold',
   },
   content: {
-    padding: 16,
+    padding: 12,
   },
 }); 
