@@ -176,7 +176,7 @@ export default function TableManagement() {
     return (
       <TouchableOpacity onPress={() => handleTablePress(table)}>
         <Card
-          style={[
+          style={StyleSheet.flatten([
             styles.tableCard,
             {
               backgroundColor: config.color,
@@ -184,7 +184,7 @@ export default function TableManagement() {
             },
             hasAlert && styles.alertTable,
             hasPartialPayment && styles.partialPaymentTable,
-          ]}
+          ])}
         >
           <CardContent style={styles.tableContent}>
             <View style={styles.tableHeader}>
@@ -231,15 +231,65 @@ export default function TableManagement() {
 
   const renderStatusSummary = () => (
     <View style={styles.statusSummary}>
+      <TouchableOpacity
+        style={[
+          styles.statusCard,
+          filterStatus === "all" && styles.selectedStatusCard,
+        ]}
+        onPress={() => setFilterStatus("all")}
+      >
+        <Card style={styles.statusCardInner}>
+          <CardContent style={styles.statusContent}>
+            <Text style={[
+              styles.statusCount,
+              filterStatus === "all" && styles.selectedStatusText,
+            ]}>
+              {tables.length}
+            </Text>
+            <Text style={[
+              styles.statusLabel,
+              filterStatus === "all" && styles.selectedStatusText,
+            ]}>
+              Todas
+            </Text>
+          </CardContent>
+        </Card>
+      </TouchableOpacity>
+      
       {Object.entries(statusConfig).map(([status, config]) => {
         const count = statusCounts[status as TableStatus] || 0;
         return (
-          <Card key={status} style={styles.statusCard}>
-            <CardContent style={styles.statusContent}>
-              <Text style={[styles.statusCount, { color: config.textColor }]}>{count}</Text>
-              <Text style={[styles.statusLabel, { color: config.textColor }]}>{config.label}</Text>
-            </CardContent>
-          </Card>
+          <TouchableOpacity
+            key={status}
+            style={[
+              styles.statusCard,
+              filterStatus === status && styles.selectedStatusCard,
+            ]}
+            onPress={() => setFilterStatus(status as TableStatus)}
+          >
+            <Card style={StyleSheet.flatten([
+              styles.statusCardInner,
+              filterStatus === status && styles.selectedStatusCardInner,
+              { backgroundColor: config.color },
+            ])}>
+              <CardContent style={styles.statusContent}>
+                <Text style={[
+                  styles.statusCount,
+                  { color: config.textColor },
+                  filterStatus === status && styles.selectedStatusText,
+                ]}>
+                  {count}
+                </Text>
+                <Text style={[
+                  styles.statusLabel,
+                  { color: config.textColor },
+                  filterStatus === status && styles.selectedStatusText,
+                ]}>
+                  {config.label}
+                </Text>
+              </CardContent>
+            </Card>
+          </TouchableOpacity>
         );
       })}
     </View>
@@ -270,13 +320,13 @@ export default function TableManagement() {
               return (
                 <Alert
                   key={alert.id}
-                  style={[
+                  style={StyleSheet.flatten([
                     styles.alert,
                     {
                       backgroundColor: config.bgColor,
                       borderLeftColor: config.borderColor,
                     },
-                  ]}
+                  ])}
                 >
                   <AlertDescription style={styles.alertDescription}>
                     <View style={styles.alertContent}>
@@ -320,8 +370,7 @@ export default function TableManagement() {
       <StatusBar barStyle="dark-content" backgroundColor="#f9fafb" />
       
       <View style={styles.header}>
-        <Text style={styles.title}>Gestión de Mesas</Text>
-        <Text style={styles.subtitle}>Vista del camarero - Estado actual del restaurante</Text>
+        <Text style={styles.title}>TableTogether - Gestión de Mesas</Text>
       </View>
 
       <View style={styles.mainContent}>
@@ -329,27 +378,6 @@ export default function TableManagement() {
         <View style={styles.leftPanel}>
           {renderStatusSummary()}
           {renderAlerts()}
-          
-          <View style={styles.filterSection}>
-            <Text style={styles.filterTitle}>Filtrar por estado:</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterButtons}>
-              {[
-                { value: "all", label: "Todas" },
-                { value: "available", label: "Libres" },
-                { value: "occupied", label: "Ocupadas" },
-                { value: "reserved", label: "Reservadas" },
-              ].map((filter) => (
-                <Button
-                  key={filter.value}
-                  title={filter.label}
-                  onPress={() => setFilterStatus(filter.value as TableStatus | "all")}
-                  variant={filterStatus === filter.value ? "default" : "outline"}
-                  size="sm"
-                  style={styles.filterButton}
-                />
-              ))}
-            </ScrollView>
-          </View>
         </View>
 
         {/* Panel derecho con el mapa de mesas */}
@@ -361,6 +389,11 @@ export default function TableManagement() {
             numColumns={isTablet ? 4 : 2}
             contentContainerStyle={styles.tablesGrid}
             showsVerticalScrollIndicator={false}
+            showsHorizontalScrollIndicator={false}
+            style={styles.tablesList}
+            columnWrapperStyle={styles.tableRow}
+            horizontal={false}
+            key={isTablet ? 'tablet' : 'mobile'}
           />
         </View>
       </View>
@@ -571,23 +604,30 @@ const styles = StyleSheet.create({
   statusSummary: {
     flexDirection: isTablet ? 'column' : 'row',
     padding: 16,
-    gap: isTablet ? 8 : 12,
+    gap: isTablet ? 12 : 8,
   },
   statusCard: {
     flex: isTablet ? undefined : 1,
-    marginBottom: isTablet ? 8 : 0,
+    marginBottom: isTablet ? 12 : 0,
+    minHeight: isTablet ? 80 : 60,
+  },
+  statusCardInner: {
+    flex: 1,
+    minHeight: isTablet ? 80 : 60,
   },
   statusContent: {
     alignItems: 'center',
     padding: isTablet ? 16 : 12,
+    justifyContent: 'center',
+    flex: 1,
   },
   statusCount: {
-    fontSize: isTablet ? 28 : 24,
+    fontSize: isTablet ? 32 : 24,
     fontWeight: 'bold',
     marginBottom: 4,
   },
   statusLabel: {
-    fontSize: isTablet ? 14 : 12,
+    fontSize: isTablet ? 16 : 14,
     fontWeight: '500',
   },
   alertsSection: {
@@ -631,32 +671,23 @@ const styles = StyleSheet.create({
     color: '#6b7280',
     marginTop: 2,
   },
-  filterSection: {
-    padding: 16,
-  },
-  filterTitle: {
-    fontSize: isTablet ? 16 : 14,
-    fontWeight: '600',
-    color: '#374151',
-    marginBottom: 8,
-  },
-  filterButtons: {
-    flexDirection: 'row',
-  },
-  filterButton: {
-    marginRight: 8,
+  tablesList: {
+    flex: 1,
   },
   tablesGrid: {
-    padding: isTablet ? 24 : 16,
+    padding: isTablet ? 8 : 6,
+    alignItems: 'center',
   },
   tableCard: {
     flex: 1,
-    margin: isTablet ? 6 : 4,
+    marginHorizontal: 4,
     borderWidth: 2,
-    minHeight: isTablet ? 120 : 100,
+    height: isTablet ? 140 : 100,
+    minHeight: isTablet ? 140 : 100,
+    aspectRatio: 1,
   },
   tableContent: {
-    padding: isTablet ? 16 : 12,
+    padding: isTablet ? 12 : 8,
     alignItems: 'center',
     justifyContent: 'center',
     flex: 1,
@@ -667,11 +698,11 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   tableNumber: {
-    fontSize: isTablet ? 20 : 16,
+    fontSize: isTablet ? 18 : 16,
     fontWeight: 'bold',
   },
   paymentIcon: {
-    marginLeft: 4,
+    marginLeft: 3,
   },
   tableCapacity: {
     fontSize: isTablet ? 14 : 12,
@@ -679,6 +710,7 @@ const styles = StyleSheet.create({
   },
   timeBadge: {
     marginBottom: 4,
+    alignSelf: 'center',
   },
   alertIndicator: {
     flexDirection: 'row',
@@ -772,5 +804,25 @@ const styles = StyleSheet.create({
   },
   confirmButton: {
     marginTop: 16,
+  },
+  tableRow: {
+    justifyContent: 'space-between',
+    marginBottom: 8,
+    width: '100%',
+    paddingHorizontal: 8,
+  },
+  selectedStatusCard: {
+    borderColor: '#3b82f6',
+    borderWidth: 3,
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  selectedStatusCardInner: {
+    backgroundColor: '#e0f2fe',
+    borderRadius: 12,
+  },
+  selectedStatusText: {
+    color: '#3b82f6',
+    fontWeight: 'bold',
   },
 }); 
