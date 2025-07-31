@@ -2,7 +2,7 @@ import { Table, TableAlert } from '../types/table';
 
 export const initialTables: Table[] = Array.from({ length: 50 }, (_, i) => {
   const status = ["available", "occupied", "reserved"][Math.floor(Math.random() * 3)] as any;
-  const orderTotal = status === "occupied" && Math.random() > 0.3 ? Math.floor(Math.random() * 150) + 20 : undefined;
+  const orderTotal = status === "occupied" ? Math.floor(Math.random() * 150) + 20 : undefined;
   const hasPartialPayment = orderTotal && Math.random() > 0.8;
   const paidAmount = hasPartialPayment ? Math.floor(orderTotal * 0.3) : undefined;
 

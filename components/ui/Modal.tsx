@@ -16,8 +16,16 @@ export const Modal: React.FC<ModalProps> = ({ visible, onClose, title, children 
       transparent={true}
       onRequestClose={onClose}
     >
-      <View style={styles.overlay}>
-        <View style={styles.modal}>
+      <TouchableOpacity 
+        style={styles.overlay} 
+        activeOpacity={1} 
+        onPress={onClose}
+      >
+        <TouchableOpacity 
+          style={styles.modal} 
+          activeOpacity={1}
+          onPress={(e) => e.stopPropagation()}
+        >
           {title && (
             <View style={styles.header}>
               <Text style={styles.title}>{title}</Text>
@@ -29,8 +37,8 @@ export const Modal: React.FC<ModalProps> = ({ visible, onClose, title, children 
           <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
             {children}
           </ScrollView>
-        </View>
-      </View>
+        </TouchableOpacity>
+      </TouchableOpacity>
     </RNModal>
   );
 };
@@ -47,7 +55,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     margin: 20,
     maxHeight: '80%',
-    width: '90%',
+    width: '70%',
     shadowColor: '#000',
     shadowOffset: {
       width: 0,

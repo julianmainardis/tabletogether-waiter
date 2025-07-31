@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
   StatusBar,
   FlatList,
   Dimensions,
+  TextInput,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Button } from '../components/ui/button';
@@ -34,8 +35,101 @@ export default function TableManagement() {
   const [showTableModal, setShowTableModal] = useState(false);
   const [showAssignModal, setShowAssignModal] = useState(false);
   const [selectedDiners, setSelectedDiners] = useState(2);
+  const [manualDiners, setManualDiners] = useState('');
+  const [showManualInput, setShowManualInput] = useState(false);
+  const [validationError, setValidationError] = useState('');
   const [currentView, setCurrentView] = useState<ViewType>('tables');
   const [selectedTableForMenu, setSelectedTableForMenu] = useState<number | null>(null);
+  const [isModifyingOrder, setIsModifyingOrder] = useState(false);
+  const [tableOrders, setTableOrders] = useState<Record<number, any[]>>(() => {
+    // Generar pedidos de ejemplo para TODAS las mesas ocupadas que tienen orderTotal
+    const occupiedTablesWithTotal = initialTables.filter(t => t.status === 'occupied' && t.orderTotal);
+    const initialOrders: Record<number, any[]> = {};
+    
+    // Productos de ejemplo
+    const sampleItems = [
+      { id: '1', name: 'Jamón Ibérico', price: 18.50 },
+      { id: '2', name: 'Paella Valenciana', price: 22.00 },
+      { id: '3', name: 'Ensalada César', price: 12.50 },
+      { id: '4', name: 'Solomillo a la parrilla', price: 28.00 },
+      { id: '5', name: 'Tiramisú', price: 8.50 },
+      { id: '6', name: 'Gazpacho', price: 9.00 },
+      { id: '7', name: 'Pulpo a la gallega', price: 16.00 },
+      { id: '8', name: 'Tarta de queso', price: 7.50 }
+    ];
+    
+    // Generar pedidos para cada mesa ocupada
+    occupiedTablesWithTotal.forEach((table, index) => {
+      const targetTotal = table.orderTotal!;
+      const order: any[] = [];
+      let currentTotal = 0;
+      
+      // Seleccionar productos aleatoriamente hasta acercarse al total
+      const availableItems = [...sampleItems];
+      const maxItems = Math.min(4, Math.floor(Math.random() * 3) + 2); // Entre 2 y 4 productos
+      
+      for (let i = 0; i < maxItems && currentTotal < targetTotal * 0.8; i++) {
+        const randomIndex = Math.floor(Math.random() * availableItems.length);
+        const item = availableItems[randomIndex];
+        const maxQuantity = Math.floor((targetTotal - currentTotal) / item.price);
+        const quantity = Math.max(1, Math.min(3, maxQuantity));
+        
+        if (quantity > 0) {
+          order.push({ ...item, quantity });
+          currentTotal += item.price * quantity;
+        }
+        
+        availableItems.splice(randomIndex, 1); // No repetir el mismo producto
+      }
+      
+      // Si no llegamos al total, ajustar la cantidad del último producto
+      if (order.length > 0 && currentTotal < targetTotal) {
+        const lastItem = order[order.length - 1];
+        const difference = targetTotal - currentTotal;
+        const additionalQuantity = Math.floor(difference / lastItem.price);
+        if (additionalQuantity > 0) {
+          lastItem.quantity += additionalQuantity;
+        }
+      }
+      
+      initialOrders[table.id] = order;
+    });
+    
+    return initialOrders;
+  });
+  const [tableDiners, setTableDiners] = useState<Record<number, number>>(() => {
+    // Generar cantidad de comensales para TODAS las mesas ocupadas
+    const occupiedTables = initialTables.filter(t => t.status === 'occupied');
+    const initialDiners: Record<number, number> = {};
+    
+    occupiedTables.forEach(table => {
+      // Generar cantidad aleatoria pero realista según la capacidad
+      const minDiners = 1;
+      const maxDiners = table.capacity;
+      const diners = Math.floor(Math.random() * (maxDiners - minDiners + 1)) + minDiners;
+      initialDiners[table.id] = diners;
+    });
+    
+    return initialDiners;
+  });
+
+  // Sincronizar los totales de las mesas con los pedidos existentes
+  useEffect(() => {
+    setTables(prevTables => 
+      prevTables.map(table => {
+        const order = tableOrders[table.id];
+        if (order && order.length > 0) {
+          // Calcular el total exacto basado en los productos del pedido
+          const calculatedTotal = order.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+          return {
+            ...table,
+            orderTotal: Math.round(calculatedTotal * 100) / 100 // Redondear a 2 decimales
+          };
+        }
+        return table;
+      })
+    );
+  }, [tableOrders]); // Ejecutar cuando cambien los pedidos
 
   const updateTableStatus = (tableId: number, newStatus: TableStatus) => {
     setTables((prev) =>
@@ -63,7 +157,7 @@ export default function TableManagement() {
               ...table,
               status: newStatus,
               timeOccupied: "0:00h",
-              orderTotal: 0,
+              orderTotal: Math.floor(Math.random() * 50) + 20, // Total inicial para mesas reservadas
             };
           }
           return { ...table, status: newStatus };
@@ -73,6 +167,13 @@ export default function TableManagement() {
     );
     setSelectedTable(null);
     setShowTableModal(false);
+    
+    // Si se está confirmando la llegada de una mesa reservada, redirigir al menú
+    if (newStatus === "occupied") {
+      setSelectedTableForMenu(tableId);
+      setSelectedDiners(2); // Valor por defecto
+      setCurrentView('menu');
+    }
   };
 
   const processPayment = (tableId: number, amount: number, isFullPayment: boolean) => {
@@ -107,7 +208,7 @@ export default function TableManagement() {
 
   const addAlert = (tableId: number, type: AlertType, message: string) => {
     const table = tables.find((t) => t.id === tableId);
-    if (table?.status !== "occupied") return;
+    if (table?.status !== "occupied") return; // Solo mesas ocupadas pueden tener alertas
 
     const newAlert: TableAlert = {
       id: Date.now().toString(),
@@ -152,6 +253,7 @@ export default function TableManagement() {
 
   const handleAssignTable = (tableId: number, diners: number) => {
     updateTableStatus(tableId, "occupied");
+    setTableDiners(prev => ({ ...prev, [tableId]: diners }));
     setSelectedTableForMenu(tableId);
     setSelectedDiners(diners);
     setCurrentView('menu');
@@ -159,13 +261,57 @@ export default function TableManagement() {
 
   const handleNewOrder = (tableId: number) => {
     setSelectedTableForMenu(tableId);
+    setIsModifyingOrder(false);
+    setCurrentView('menu');
+  };
+
+  const handleModifyOrder = (tableId: number) => {
+    setSelectedTableForMenu(tableId);
+    setIsModifyingOrder(true);
     setCurrentView('menu');
   };
 
   const handleConfirmOrder = (items: any[]) => {
     console.log("Pedido confirmado:", items);
+    
+    // Calcular el total del pedido
+    const total = items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+    
+    // Almacenar el pedido de la mesa
+    setTableOrders(prev => ({
+      ...prev,
+      [selectedTableForMenu!]: items
+    }));
+    
+    // Actualizar el total de la mesa
+    setTables(prev => prev.map(table => {
+      if (table.id === selectedTableForMenu) {
+        return {
+          ...table,
+          orderTotal: total
+        };
+      }
+      return table;
+    }));
+    
     setCurrentView('tables');
     setSelectedTableForMenu(null);
+    setIsModifyingOrder(false);
+  };
+
+  const validateDiners = (diners: number) => {
+    if (!selectedTable) return false;
+    return diners > 0 && diners <= selectedTable.capacity;
+  };
+
+  const handleDinerSelection = (diners: number) => {
+    setSelectedDiners(diners);
+    setManualDiners('');
+    setValidationError('');
+    
+    if (!validateDiners(diners)) {
+      setValidationError(`La cantidad de comensales debe ser entre 1 y ${selectedTable?.capacity || 0}`);
+    }
   };
 
   const renderTableCard = ({ item: table }: { item: Table }) => {
@@ -192,7 +338,9 @@ export default function TableManagement() {
                 Mesa {table.id}
               </Text>
               {hasPartialPayment && (
-                <Ionicons name="card" size={isTablet ? 20 : 16} color="#3b82f6" style={styles.paymentIcon} />
+                <View style={styles.paymentIcon}>
+                  <Ionicons name="card" size={isTablet ? 20 : 16} color="#3b82f6" />
+                </View>
               )}
             </View>
             
@@ -208,7 +356,9 @@ export default function TableManagement() {
 
             {hasAlert && (
               <View style={styles.alertIndicator}>
-                <Ionicons name="notifications" size={isTablet ? 18 : 16} color="#ef4444" />
+                <View>
+                  <Ionicons name="notifications" size={isTablet ? 18 : 16} color="#ef4444" />
+                </View>
                 <Text style={styles.alertCount}>
                   {activeAlerts.filter((alert) => alert.tableId === table.id).length}
                 </Text>
@@ -304,7 +454,7 @@ export default function TableManagement() {
           onPress={() => setShowAlerts(!showAlerts)}
           variant={showAlerts ? "default" : "outline"}
           size="sm"
-          icon={<Ionicons name="notifications" size={16} color="#ffffff" />}
+          icon={<View><Ionicons name="notifications" size={16} color="#ffffff" /></View>}
         />
       </View>
       
@@ -328,7 +478,7 @@ export default function TableManagement() {
                     },
                   ])}
                 >
-                  <AlertDescription style={styles.alertDescription}>
+                  <View style={styles.alertDescription}>
                     <View style={styles.alertContent}>
                       <Text style={styles.alertText}>
                         <Text style={styles.alertTableText}>Mesa {alert.tableId}</Text> - {alert.message}
@@ -341,7 +491,7 @@ export default function TableManagement() {
                       variant="ghost"
                       size="sm"
                     />
-                  </AlertDescription>
+                  </View>
                 </Alert>
               );
             })}
@@ -352,13 +502,18 @@ export default function TableManagement() {
 
   // Renderizar vista del menú
   if (currentView === 'menu' && selectedTableForMenu) {
+    const currentDiners = tableDiners[selectedTableForMenu] || selectedDiners;
+    
     return (
       <MenuView
         tableId={selectedTableForMenu}
-        diners={selectedDiners}
+        diners={currentDiners}
+        isModifying={isModifyingOrder}
+        currentOrder={tableOrders[selectedTableForMenu] || []}
         onBack={() => {
           setCurrentView('tables');
           setSelectedTableForMenu(null);
+          setIsModifyingOrder(false);
         }}
         onConfirmOrder={handleConfirmOrder}
       />
@@ -470,7 +625,7 @@ export default function TableManagement() {
                     setShowTableModal(false);
                     setShowAssignModal(true);
                   }}
-                  icon={<Ionicons name="people" size={16} color="#ffffff" />}
+                  icon={<View><Ionicons name="people" size={16} color="#ffffff" /></View>}
                   style={styles.actionButton}
                 />
               )}
@@ -484,17 +639,17 @@ export default function TableManagement() {
                       handleNewOrder(selectedTable.id);
                     }}
                     variant="outline"
-                    icon={<Ionicons name="add" size={16} color="#374151" />}
+                    icon={<View><Ionicons name="add" size={16} color="#374151" /></View>}
                     style={styles.actionButton}
                   />
                   <Button
                     title="Modificar pedido"
                     onPress={() => {
                       setShowTableModal(false);
-                      console.log("Modificar pedido para mesa", selectedTable.id);
+                      handleModifyOrder(selectedTable.id);
                     }}
                     variant="outline"
-                    icon={<Ionicons name="create" size={16} color="#374151" />}
+                    icon={<View><Ionicons name="create" size={16} color="#374151" /></View>}
                     style={styles.actionButton}
                   />
                   <Button
@@ -504,7 +659,7 @@ export default function TableManagement() {
                       processPayment(selectedTable.id, selectedTable.orderTotal || 0, true);
                     }}
                     variant="outline"
-                    icon={<Ionicons name="card" size={16} color="#374151" />}
+                    icon={<View><Ionicons name="card" size={16} color="#374151" /></View>}
                     style={styles.actionButton}
                   />
                 </View>
@@ -517,7 +672,7 @@ export default function TableManagement() {
                     setShowTableModal(false);
                     updateTableStatus(selectedTable.id, "occupied");
                   }}
-                  icon={<Ionicons name="checkmark-circle" size={16} color="#ffffff" />}
+                  icon={<View><Ionicons name="checkmark-circle" size={16} color="#ffffff" /></View>}
                   style={styles.actionButton}
                 />
               )}
@@ -530,35 +685,73 @@ export default function TableManagement() {
       <Modal
         visible={showAssignModal}
         onClose={() => setShowAssignModal(false)}
-        title="Asignar Mesa"
       >
         <View style={styles.assignModalContent}>
           <Text style={styles.assignText}>
             ¿Cuántos comensales para la mesa {selectedTable?.id}?
           </Text>
           
+          <View style={styles.manualInputSection}>
+            <TextInput
+              style={styles.textInput}
+              value={manualDiners}
+              onChangeText={(text) => {
+                setManualDiners(text);
+                setValidationError('');
+                if (text) {
+                  setSelectedDiners(0);
+                  const diners = parseInt(text);
+                  if (!isNaN(diners) && !validateDiners(diners)) {
+                    setValidationError(`La cantidad de comensales debe ser entre 1 y ${selectedTable?.capacity || 0}`);
+                  }
+                }
+              }}
+              placeholder="Indique cantidad de comensales"
+              keyboardType="numeric"
+              maxLength={2}
+            />
+            {validationError && (
+              <Text style={styles.inputHelper}>
+                {validationError}
+              </Text>
+            )}
+          </View>
+          
           <View style={styles.dinersSelector}>
             {[2, 4, 6, 8].map((diners) => (
               <Button
                 key={diners}
                 title={`${diners} personas`}
-                onPress={() => setSelectedDiners(diners)}
+                onPress={() => handleDinerSelection(diners)}
                 variant={selectedDiners === diners ? "default" : "outline"}
                 style={styles.dinerButton}
               />
             ))}
           </View>
 
-          <Button
-            title="Confirmar asignación"
-            onPress={() => {
-              if (selectedTable) {
-                handleAssignTable(selectedTable.id, selectedDiners);
-                setShowAssignModal(false);
-              }
-            }}
-            style={styles.confirmButton}
-          />
+          <View style={styles.confirmSection}>
+            <Button
+              title="Confirmar"
+              onPress={() => {
+                if (selectedTable) {
+                  const finalDiners = manualDiners 
+                    ? parseInt(manualDiners) 
+                    : selectedDiners;
+                  
+                  if (validateDiners(finalDiners)) {
+                    handleAssignTable(selectedTable.id, finalDiners);
+                    setShowAssignModal(false);
+                    setManualDiners('');
+                    setValidationError('');
+                  } else {
+                    setValidationError(`La cantidad de comensales debe ser entre 1 y ${selectedTable.capacity || 0}`);
+                  }
+                }
+              }}
+              disabled={manualDiners ? (!manualDiners || !validateDiners(parseInt(manualDiners))) : !validateDiners(selectedDiners)}
+              style={styles.confirmButton}
+            />
+          </View>
         </View>
       </Modal>
     </SafeAreaView>
@@ -739,7 +932,7 @@ const styles = StyleSheet.create({
     borderWidth: 2,
   },
   modalContent: {
-    gap: 16,
+    gap: 24,
   },
   tableInfo: {
     gap: 8,
@@ -786,11 +979,32 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   assignModalContent: {
-    gap: 16,
+    gap: 24,
   },
   assignText: {
     fontSize: isTablet ? 18 : 16,
     color: '#374151',
+    textAlign: 'center',
+  },
+  manualInputSection: {
+    alignItems: 'center',
+  },
+  textInput: {
+    fontSize: isTablet ? 16 : 14,
+    color: '#111827',
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    borderRadius: 8,
+    backgroundColor: '#ffffff',
+    width: '40%',
+    textAlign: 'center',
+  },
+  inputHelper: {
+    fontSize: isTablet ? 12 : 10,
+    color: '#6b7280',
+    marginTop: 4,
     textAlign: 'center',
   },
   dinersSelector: {
@@ -802,8 +1016,11 @@ const styles = StyleSheet.create({
   dinerButton: {
     minWidth: isTablet ? 100 : 80,
   },
+  confirmSection: {
+    alignItems: 'center',
+  },
   confirmButton: {
-    marginTop: 16,
+    width: '40%',
   },
   tableRow: {
     justifyContent: 'space-between',
@@ -824,5 +1041,11 @@ const styles = StyleSheet.create({
   selectedStatusText: {
     color: '#3b82f6',
     fontWeight: 'bold',
+  },
+  validationErrorAlert: {
+    marginTop: 12,
+    backgroundColor: '#fef3c7',
+    borderColor: '#fcd34d',
+    borderWidth: 1,
   },
 }); 

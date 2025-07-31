@@ -1,5 +1,5 @@
 import React from 'react';
-import { TouchableOpacity, Text, StyleSheet, ViewStyle, TextStyle } from 'react-native';
+import { TouchableOpacity, Text, StyleSheet, ViewStyle, TextStyle, View } from 'react-native';
 
 interface ButtonProps {
   title: string;
@@ -45,7 +45,7 @@ export const Button: React.FC<ButtonProps> = ({
       disabled={disabled}
       activeOpacity={0.7}
     >
-      {icon && <>{icon}</>}
+      {icon && <View style={styles.iconContainer}>{icon}</View>}
       <Text style={textStyleCombined}>{title}</Text>
     </TouchableOpacity>
   );
@@ -113,5 +113,8 @@ const styles = StyleSheet.create({
   },
   disabledText: {
     color: '#9ca3af',
+  },
+  iconContainer: {
+    marginRight: 8,
   },
 });

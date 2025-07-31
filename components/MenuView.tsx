@@ -26,6 +26,8 @@ interface MenuItem {
 interface MenuViewProps {
   tableId: number;
   diners: number;
+  isModifying?: boolean;
+  currentOrder?: any[];
   onBack: () => void;
   onConfirmOrder: (items: any[]) => void;
 }
@@ -79,10 +81,23 @@ const mockMenuItems: MenuItem[] = [
 export const MenuView: React.FC<MenuViewProps> = ({
   tableId,
   diners,
+  isModifying = false,
+  currentOrder = [],
   onBack,
   onConfirmOrder,
 }) => {
-  const [selectedItems, setSelectedItems] = useState<Record<string, number>>({});
+  const [selectedItems, setSelectedItems] = useState<Record<string, number>>(() => {
+    // Si estamos modificando, inicializar con el pedido actual
+    if (isModifying && currentOrder.length > 0) {
+      console.log('Modificando pedido actual:', currentOrder);
+      const initialItems: Record<string, number> = {};
+      currentOrder.forEach(item => {
+        initialItems[item.id] = item.quantity;
+      });
+      return initialItems;
+    }
+    return {};
+  });
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
 
   const categories = ['all', ...Array.from(new Set(mockMenuItems.map(item => item.category)))];
@@ -106,6 +121,14 @@ export const MenuView: React.FC<MenuViewProps> = ({
       } else {
         delete newItems[itemId];
       }
+      return newItems;
+    });
+  };
+
+  const removeItemCompletely = (itemId: string) => {
+    setSelectedItems(prev => {
+      const newItems = { ...prev };
+      delete newItems[itemId];
       return newItems;
     });
   };
@@ -173,7 +196,9 @@ export const MenuView: React.FC<MenuViewProps> = ({
           <Ionicons name="arrow-back" size={isTablet ? 28 : 24} color="#374151" />
         </TouchableOpacity>
         <View style={styles.headerInfo}>
-          <Text style={styles.headerTitle}>Menú - Mesa {tableId}</Text>
+          <Text style={styles.headerTitle}>
+            {isModifying ? 'Modificar Pedido' : 'Menú'} - Mesa {tableId}
+          </Text>
           <Text style={styles.headerSubtitle}>{diners} comensales</Text>
         </View>
       </View>
@@ -181,6 +206,23 @@ export const MenuView: React.FC<MenuViewProps> = ({
       <View style={styles.mainContent}>
         {/* Panel izquierdo con categorías */}
         <View style={styles.leftPanel}>
+          {isModifying && (
+            <View style={styles.currentOrderSection}>
+              <Text style={styles.currentOrderTitle}>Pedido Actual</Text>
+              {currentOrder.length > 0 ? (
+                currentOrder.map(item => (
+                  <View key={item.id} style={styles.currentOrderItem}>
+                    <Text style={styles.currentOrderItemText}>
+                      {item.name} x{item.quantity} - €{(item.price * item.quantity).toFixed(2)}
+                    </Text>
+                  </View>
+                ))
+              ) : (
+                <Text style={styles.noOrderText}>No hay pedido actual</Text>
+              )}
+            </View>
+          )}
+          
           <View style={styles.categoriesSection}>
             <Text style={styles.categoriesTitle}>Categorías</Text>
             <ScrollView showsVerticalScrollIndicator={false}>
@@ -224,14 +266,22 @@ export const MenuView: React.FC<MenuViewProps> = ({
           
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.selectedItems}>
             {getSelectedItemsList().map(item => (
-              <Badge key={item.id} variant="secondary" style={styles.selectedItem}>
-                {item.name} x{item.quantity}
-              </Badge>
+              <View key={item.id} style={styles.selectedItemContainer}>
+                <Badge variant="secondary" style={styles.selectedItem}>
+                  {item.name} x{item.quantity}
+                </Badge>
+                <TouchableOpacity
+                  onPress={() => removeItemCompletely(item.id)}
+                  style={styles.removeButton}
+                >
+                  <Ionicons name="close-circle" size={16} color="#ef4444" />
+                </TouchableOpacity>
+              </View>
             ))}
           </ScrollView>
           
           <Button
-            title="Confirmar pedido"
+            title={isModifying ? "Confirmar modificación" : "Confirmar pedido"}
             onPress={() => onConfirmOrder(getSelectedItemsList())}
             style={styles.confirmButton}
           />
@@ -400,7 +450,44 @@ const styles = StyleSheet.create({
   selectedItem: {
     marginRight: 8,
   },
+  selectedItemContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginRight: 8,
+  },
+  removeButton: {
+    marginLeft: 8,
+  },
   confirmButton: {
     marginTop: 8,
+  },
+  currentOrderSection: {
+    padding: isTablet ? 20 : 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+    backgroundColor: '#f9fafb',
+  },
+  currentOrderTitle: {
+    fontSize: isTablet ? 16 : 14,
+    fontWeight: '600',
+    color: '#111827',
+    marginBottom: 12,
+  },
+  currentOrderItem: {
+    backgroundColor: '#ffffff',
+    padding: 8,
+    borderRadius: 6,
+    marginBottom: 6,
+    borderLeftWidth: 3,
+    borderLeftColor: '#3b82f6',
+  },
+  currentOrderItemText: {
+    fontSize: isTablet ? 14 : 12,
+    color: '#374151',
+  },
+  noOrderText: {
+    fontSize: isTablet ? 14 : 12,
+    color: '#6b7280',
+    fontStyle: 'italic',
   },
 }); 
