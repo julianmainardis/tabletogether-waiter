@@ -105,35 +105,60 @@ export default function TableManagement() {
     const initialDiners: Record<number, number> = {};
     
     occupiedTables.forEach(table => {
-      // Generar cantidad aleatoria pero realista según la capacidad
+      // Generar cantidad realista pero no siempre la capacidad máxima
+      // Entre 1 y la capacidad de la mesa, con tendencia hacia valores medios
       const minDiners = 1;
       const maxDiners = table.capacity;
-      const diners = Math.floor(Math.random() * (maxDiners - minDiners + 1)) + minDiners;
+      
+      let diners;
+      if (maxDiners <= 2) {
+        diners = maxDiners; // Mesas pequeñas generalmente llenas
+      } else if (maxDiners <= 4) {
+        // Mesas de 4: entre 2-4, más probabilidad de 2-3
+        diners = Math.random() < 0.7 ? 
+                 Math.floor(Math.random() * 2) + 2 : // 2-3
+                 maxDiners; // 4
+      } else {
+        // Mesas grandes: entre 2 y capacidad, más probabilidad de valores medios
+        const midPoint = Math.ceil(maxDiners * 0.6);
+        diners = Math.floor(Math.random() * (maxDiners - minDiners + 1)) + minDiners;
+        // Sesgar hacia valores medios
+        if (Math.random() < 0.6) {
+          diners = Math.min(midPoint, diners);
+        }
+      }
+      
       initialDiners[table.id] = diners;
     });
     
     return initialDiners;
   });
 
-  // Sincronizar los totales de las mesas con los pedidos existentes
+  // Sincronizar una sola vez al inicio los totales con pedidos existentes
   useEffect(() => {
-    setTables(prevTables => 
-      prevTables.map(table => {
-        const order = tableOrders[table.id];
-        if (order && order.length > 0) {
-          // Calcular el total exacto basado en los productos del pedido
-          const calculatedTotal = order.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-          return {
-            ...table,
-            orderTotal: Math.round(calculatedTotal * 100) / 100 // Redondear a 2 decimales
-          };
-        }
-        return table;
-      })
-    );
-  }, [tableOrders]); // Ejecutar cuando cambien los pedidos
+    const occupiedTablesWithOrders = Object.keys(tableOrders);
+    if (occupiedTablesWithOrders.length > 0) {
+      setTables(prevTables => 
+        prevTables.map(table => {
+          const order = tableOrders[table.id];
+          if (order && order.length > 0) {
+            // Calcular el total exacto basado en los productos del pedido
+            const calculatedTotal = order.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+            return {
+              ...table,
+              orderTotal: Math.round(calculatedTotal * 100) / 100 // Redondear a 2 decimales
+            };
+          }
+          return table;
+        })
+      );
+    }
+  }, []); // Solo ejecutar una vez al inicio
 
   const updateTableStatus = (tableId: number, newStatus: TableStatus) => {
+    // Obtener la mesa antes de actualizar el estado
+    const currentTable = tables.find(t => t.id === tableId);
+    
     setTables((prev) =>
       prev.map((table) => {
         if (table.id === tableId) {
@@ -152,14 +177,12 @@ export default function TableManagement() {
               ...table,
               status: newStatus,
               timeOccupied: "0:00h",
-              orderTotal: Math.floor(Math.random() * 100) + 30,
             };
           } else if (newStatus === "occupied" && table.status === "reserved") {
             return {
               ...table,
               status: newStatus,
               timeOccupied: "0:00h",
-              orderTotal: Math.floor(Math.random() * 50) + 20, // Total inicial para mesas reservadas
             };
           }
           return { ...table, status: newStatus };
@@ -172,8 +195,12 @@ export default function TableManagement() {
     
     // Si se está confirmando la llegada de una mesa reservada, redirigir al menú
     if (newStatus === "occupied") {
+      if (currentTable?.status === "reserved") {
+        // Para mesa reservada, usar capacidad máxima
+        setTableDiners(prev => ({ ...prev, [tableId]: currentTable.capacity }));
+        setSelectedDiners(currentTable.capacity);
+      }
       setSelectedTableForMenu(tableId);
-      setSelectedDiners(2); // Valor por defecto
       setCurrentView('menu');
     }
   };
@@ -375,7 +402,10 @@ export default function TableManagement() {
             </View>
             
             <Text style={[styles.tableCapacity, { color: config.textColor }]}>
-              {table.capacity} personas
+              {table.status === 'occupied' && tableDiners[table.id] 
+                ? `${tableDiners[table.id]} comensales`
+                : `${table.capacity} personas`
+              }
             </Text>
 
             {table.timeOccupied && (
@@ -532,7 +562,19 @@ export default function TableManagement() {
 
   // Renderizar vista del menú
   if (currentView === 'menu' && selectedTableForMenu) {
-    const currentDiners = tableDiners[selectedTableForMenu] || selectedDiners;
+    const currentTable = tables.find(t => t.id === selectedTableForMenu);
+    let currentDiners = tableDiners[selectedTableForMenu];
+    
+    // Fallback solo para casos extremos
+    if (!currentDiners) {
+      if (currentTable?.status === 'reserved') {
+        // Para mesas reservadas, usar la capacidad máxima
+        currentDiners = currentTable.capacity;
+      } else {
+        // Fallback para cualquier caso no previsto
+        currentDiners = 2;
+      }
+    }
     
     return (
       <MenuView
