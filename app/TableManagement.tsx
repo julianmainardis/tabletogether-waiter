@@ -20,6 +20,7 @@ import { Modal } from '../components/ui/Modal';
 import { MenuView } from '../components/MenuView';
 import { Table, TableStatus, TableAlert, AlertType } from '../types/table';
 import { initialTables, createInitialAlerts, statusConfig, alertConfig } from '../data/mockData';
+import { useWaiterAuth } from '../contexts/WaiterAuthContext';
 
 type ViewType = 'tables' | 'menu' | 'order-summary';
 
@@ -27,6 +28,7 @@ const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 const isTablet = screenWidth >= 768;
 
 export default function TableManagement() {
+  const { user, logout } = useWaiterAuth();
   const [tables, setTables] = useState<Table[]>(initialTables);
   const [selectedTable, setSelectedTable] = useState<Table | null>(null);
   const [alerts, setAlerts] = useState<TableAlert[]>(() => createInitialAlerts(initialTables));
@@ -598,6 +600,18 @@ export default function TableManagement() {
       
       <View style={styles.header}>
         <Text style={styles.title}>TableTogether - Gestión de Mesas</Text>
+        {user && (
+          <View style={styles.headerRight}>
+            <Text style={styles.headerText}>{user.name}</Text>
+            <Button
+              title="Logout"
+              onPress={logout}
+              variant="ghost"
+              size="sm"
+              icon={<View><Ionicons name="log-out" size={16} color="#374151" /></View>}
+            />
+          </View>
+        )}
       </View>
 
       <View style={styles.mainContent}>
@@ -894,6 +908,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff',
     borderBottomWidth: 1,
     borderBottomColor: '#e5e7eb',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
   title: {
     fontSize: isTablet ? 32 : 24,
@@ -904,6 +921,16 @@ const styles = StyleSheet.create({
   subtitle: {
     fontSize: isTablet ? 16 : 14,
     color: '#6b7280',
+  },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  headerText: {
+    fontSize: isTablet ? 18 : 16,
+    fontWeight: '600',
+    color: '#374151',
   },
   mainContent: {
     flex: 1,
