@@ -1,5 +1,8 @@
 import React from 'react';
-import { TouchableOpacity, Text, StyleSheet, ViewStyle, TextStyle, View } from 'react-native';
+import { TouchableOpacity, Text, StyleSheet, ViewStyle, TextStyle, View, Dimensions } from 'react-native';
+
+const { width: screenWidth } = Dimensions.get('window');
+const isTablet = screenWidth >= 768;
 
 interface ButtonProps {
   title: string;
@@ -58,10 +61,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderRadius: 8,
     paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingVertical: isTablet ? 12 : 6,
   },
   default: {
-    backgroundColor: '#3b82f6',
+    backgroundColor: '#FF6B6B', // Color gastro-primary correcto
   },
   outline: {
     backgroundColor: 'transparent',
@@ -72,18 +75,18 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   sm: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingHorizontal: isTablet ? 12 : 8,
+    paddingVertical: isTablet ? 8 : 4,
     borderRadius: 6,
   },
   md: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingHorizontal: isTablet ? 16 : 12,
+    paddingVertical: isTablet ? 12 : 6,
     borderRadius: 8,
   },
   lg: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingHorizontal: isTablet ? 20 : 16,
+    paddingVertical: isTablet ? 16 : 8,
     borderRadius: 10,
   },
   disabled: {
@@ -91,7 +94,7 @@ const styles = StyleSheet.create({
   },
   text: {
     fontWeight: '500',
-    fontSize: 14,
+    fontSize: isTablet ? 22 : 14,
   },
   defaultText: {
     color: '#ffffff',
@@ -100,16 +103,16 @@ const styles = StyleSheet.create({
     color: '#374151',
   },
   ghostText: {
-    color: '#3b82f6',
+    color: '#FF6B6B', // Color gastro-primary correcto
   },
   smText: {
-    fontSize: 12,
+    fontSize: isTablet ? 16 : 12,
   },
   mdText: {
-    fontSize: 14,
+    fontSize: isTablet ? 22 : 14,
   },
   lgText: {
-    fontSize: 16,
+    fontSize: isTablet ? 26 : 16,
   },
   disabledText: {
     color: '#9ca3af',

@@ -220,7 +220,6 @@ const styles = StyleSheet.create({
   },
   loginButton: {
     marginTop: 8,
-    paddingVertical: isTablet ? 21 : 8,
   },
   footer: {
     marginTop: isTablet ? 42 : 24,
