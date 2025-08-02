@@ -598,20 +598,26 @@ export default function TableManagement() {
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#f9fafb" />
       
+      {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.title}>TableTogether - Gestión de Mesas</Text>
-        {user && (
-          <View style={styles.headerRight}>
-            <Text style={styles.headerText}>{user.name}</Text>
+        <View style={styles.headerLeft}>
+          <Text style={styles.title}>TableTogether - Gestión de Mesas</Text>
+          {user && (
+            <Text style={styles.userInfo}>
+              {user.fullName} • {user.role}
+            </Text>
+          )}
+        </View>
+        <View style={styles.headerRight}>
+          {user && (
             <Button
-              title="Logout"
+              title="Cerrar Sesión"
               onPress={logout}
-              variant="ghost"
+              variant="outline"
               size="sm"
-              icon={<View><Ionicons name="log-out" size={16} color="#374151" /></View>}
             />
-          </View>
-        )}
+          )}
+        </View>
       </View>
 
       <View style={styles.mainContent}>
@@ -912,25 +918,27 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  title: {
-    fontSize: isTablet ? 32 : 24,
-    fontWeight: 'bold',
-    color: '#111827',
-    marginBottom: 4,
-  },
-  subtitle: {
-    fontSize: isTablet ? 16 : 14,
-    color: '#6b7280',
+  headerLeft: {
+    flex: 1,
   },
   headerRight: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
   },
-  headerText: {
-    fontSize: isTablet ? 18 : 16,
-    fontWeight: '600',
-    color: '#374151',
+  title: {
+    fontSize: isTablet ? 32 : 24,
+    fontWeight: 'bold',
+    color: '#111827',
+    marginBottom: 4,
+  },
+  userInfo: {
+    fontSize: isTablet ? 16 : 14,
+    color: '#6b7280',
+  },
+  subtitle: {
+    fontSize: isTablet ? 16 : 14,
+    color: '#6b7280',
   },
   mainContent: {
     flex: 1,

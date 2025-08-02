@@ -1,12 +1,6 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-
-interface WaiterUser {
-  id: string;
-  username: string;
-  name: string;
-  role: 'waiter' | 'head_waiter' | 'manager';
-}
+import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { waiterAuthService } from '../services/waiterAuth';
+import { WaiterUser, WaiterAuth } from '../types';
 
 interface WaiterAuthContextType {
   user: WaiterUser | null;
@@ -20,104 +14,55 @@ interface WaiterAuthContextType {
 
 const WaiterAuthContext = createContext<WaiterAuthContextType | undefined>(undefined);
 
-export const useWaiterAuth = () => {
-  const context = useContext(WaiterAuthContext);
-  if (!context) {
-    throw new Error('useWaiterAuth must be used within a WaiterAuthProvider');
-  }
-  return context;
-};
-
 interface WaiterAuthProviderProps {
-  children: React.ReactNode;
+  children: ReactNode;
 }
-
-// Datos mock de usuarios camareros
-const mockWaiters = [
-  {
-    id: '1',
-    username: 'ana.camarero',
-    password: '123456',
-    name: 'Ana García',
-    role: 'waiter' as const,
-  },
-  {
-    id: '2',
-    username: 'carlos.camarero',
-    password: '123456',
-    name: 'Carlos López',
-    role: 'waiter' as const,
-  },
-  {
-    id: '3',
-    username: 'maria.supervisor',
-    password: '123456',
-    name: 'María Rodríguez',
-    role: 'head_waiter' as const,
-  },
-  {
-    id: '4',
-    username: 'jose.manager',
-    password: '123456',
-    name: 'José Martínez',
-    role: 'manager' as const,
-  },
-];
 
 export const WaiterAuthProvider: React.FC<WaiterAuthProviderProps> = ({ children }) => {
   const [user, setUser] = useState<WaiterUser | null>(null);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Verificar si hay una sesión guardada al iniciar
+  // Verificar autenticación al cargar la app
   useEffect(() => {
-    checkStoredSession();
+    checkAuthStatus();
   }, []);
 
-  const checkStoredSession = async () => {
+  const checkAuthStatus = async () => {
     try {
-      const storedUser = await AsyncStorage.getItem('waiter_user');
-      if (storedUser) {
-        setUser(JSON.parse(storedUser));
+      setLoading(true);
+      const auth = await waiterAuthService.getStoredAuth();
+      
+      if (auth && new Date(auth.expiresAt) > new Date()) {
+        setUser(auth.user);
+        setIsAuthenticated(true);
+      } else {
+        setUser(null);
+        setIsAuthenticated(false);
       }
     } catch (error) {
-      console.error('Error checking stored session:', error);
+      console.error('Error checking auth status:', error);
+      setUser(null);
+      setIsAuthenticated(false);
     } finally {
       setLoading(false);
     }
   };
 
   const login = async (username: string, password: string) => {
-    setLoading(true);
-    setError(null);
-
     try {
-      // Simular delay de red
-      await new Promise(resolve => setTimeout(resolve, 1000));
-
-      // Buscar usuario en datos mock
-      const waiter = mockWaiters.find(
-        w => w.username === username && w.password === password
-      );
-
-      if (!waiter) {
-        throw new Error('Usuario o contraseña incorrectos');
-      }
-
-      // Crear objeto usuario sin password
-      const userData: WaiterUser = {
-        id: waiter.id,
-        username: waiter.username,
-        name: waiter.name,
-        role: waiter.role,
-      };
-
-      // Guardar en AsyncStorage
-      await AsyncStorage.setItem('waiter_user', JSON.stringify(userData));
+      setLoading(true);
+      setError(null);
       
-      setUser(userData);
-    } catch (error) {
-      setError(error instanceof Error ? error.message : 'Error de autenticación');
+      const auth = await waiterAuthService.login(username, password);
+      setUser(auth.user);
+      setIsAuthenticated(true);
+    } catch (error: any) {
+      setError(error.message || 'Error al iniciar sesión');
+      setUser(null);
+      setIsAuthenticated(false);
+      throw error;
     } finally {
       setLoading(false);
     }
@@ -125,10 +70,14 @@ export const WaiterAuthProvider: React.FC<WaiterAuthProviderProps> = ({ children
 
   const logout = async () => {
     try {
-      await AsyncStorage.removeItem('waiter_user');
-      setUser(null);
+      setLoading(true);
+      await waiterAuthService.logout();
     } catch (error) {
       console.error('Error during logout:', error);
+    } finally {
+      setUser(null);
+      setIsAuthenticated(false);
+      setLoading(false);
     }
   };
 
@@ -138,7 +87,7 @@ export const WaiterAuthProvider: React.FC<WaiterAuthProviderProps> = ({ children
 
   const value: WaiterAuthContextType = {
     user,
-    isAuthenticated: !!user,
+    isAuthenticated,
     loading,
     error,
     login,
@@ -151,4 +100,12 @@ export const WaiterAuthProvider: React.FC<WaiterAuthProviderProps> = ({ children
       {children}
     </WaiterAuthContext.Provider>
   );
+};
+
+export const useWaiterAuth = (): WaiterAuthContextType => {
+  const context = useContext(WaiterAuthContext);
+  if (context === undefined) {
+    throw new Error('useWaiterAuth must be used within a WaiterAuthProvider');
+  }
+  return context;
 }; 
