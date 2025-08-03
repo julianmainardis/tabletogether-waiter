@@ -2,13 +2,17 @@ export type TableStatus = "available" | "occupied" | "reserved";
 
 export interface Table {
   id: number;
-  capacity: number;
+  number: number;
+  capacity?: number;
   status: TableStatus;
   timeOccupied?: string;
   waiter?: string;
   orderTotal?: number;
   paidAmount?: number;
   hasPartialPayment?: boolean;
+  hasAlerts?: boolean;
+  sessionId?: string | null;
+  occupiedTime?: Date;
 }
 
 export type AlertType = "order-ready" | "check-request" | "assistance-needed";

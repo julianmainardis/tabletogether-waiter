@@ -9,8 +9,7 @@ class WaiterAuthService {
 
   async login(username: string, password: string): Promise<WaiterAuth> {
     try {
-      console.log('🔐 Intentando login con:', { username, password: '***' });
-      console.log('🌐 URL de la API:', API_BASE_URL);
+      console.log('🔐 Intentando login para usuario:', username);
       
       const response = await fetch(`${API_BASE_URL}/admin/auth/login`, {
         method: 'POST',
@@ -23,19 +22,18 @@ class WaiterAuthService {
         }),
       });
 
-      console.log('📡 Respuesta del servidor:', response.status, response.statusText);
-
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        console.error('❌ Error del servidor:', errorData);
+        console.error('❌ Error de autenticación:', errorData.message || 'Credenciales inválidas');
         throw new Error(errorData.message || 'Credenciales inválidas');
       }
 
       const data = await response.json();
+      console.log('✅ Login exitoso');
       return this.processLoginResponse(data);
       
     } catch (error: any) {
-      console.error('❌ Error en login de waiter:', error);
+      console.error('❌ Error en login:', error.message);
       throw error;
     }
   }
