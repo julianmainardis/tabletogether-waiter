@@ -8,7 +8,7 @@ interface ModalProps {
   children: React.ReactNode;
 }
 
-export const Modal: React.FC<ModalProps> = ({ visible, onClose, title, children }) => {
+const Modal: React.FC<ModalProps> = ({ visible, onClose, title, children }) => {
   return (
     <RNModal
       visible={visible}
@@ -26,7 +26,7 @@ export const Modal: React.FC<ModalProps> = ({ visible, onClose, title, children 
           activeOpacity={1}
           onPress={(e) => e.stopPropagation()}
         >
-          {title && (
+          {title && title.trim() !== "" && (
             <View style={styles.header}>
               <View style={styles.closeButtonPlaceholder} />
               <Text style={styles.title}>{title}</Text>
@@ -43,6 +43,8 @@ export const Modal: React.FC<ModalProps> = ({ visible, onClose, title, children 
     </RNModal>
   );
 };
+
+export default Modal;
 
 const styles = StyleSheet.create({
   overlay: {

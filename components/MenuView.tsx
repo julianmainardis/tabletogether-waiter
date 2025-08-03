@@ -35,6 +35,15 @@ interface MenuViewProps {
 const { width: screenWidth } = Dimensions.get('window');
 const isTablet = screenWidth >= 768;
 
+// Definir iconos para cada categoría
+const categoryIcons: Record<string, string> = {
+  'all': 'restaurant',
+  'Entrantes': 'wine',
+  'Platos principales': 'restaurant',
+  'Postres': 'ice-cream',
+  'Bebidas': 'beer',
+};
+
 const mockMenuItems: MenuItem[] = [
   {
     id: '1',
@@ -99,6 +108,7 @@ export const MenuView: React.FC<MenuViewProps> = ({
     return {};
   });
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
+  const [pressedCategory, setPressedCategory] = useState<string | null>(null);
 
   const categories = ['all', ...Array.from(new Set(mockMenuItems.map(item => item.category)))];
   
@@ -143,11 +153,12 @@ export const MenuView: React.FC<MenuViewProps> = ({
   const getSelectedItemsList = () => {
     return Object.entries(selectedItems).map(([itemId, quantity]) => {
       const item = mockMenuItems.find(i => i.id === itemId);
+      if (!item) return null;
       return {
         ...item,
         quantity,
       };
-    }).filter(Boolean);
+    }).filter((item): item is NonNullable<typeof item> => item !== null);
   };
 
   const renderMenuItem = (item: MenuItem) => {
@@ -225,24 +236,45 @@ export const MenuView: React.FC<MenuViewProps> = ({
           
           <View style={styles.categoriesSection}>
             <Text style={styles.categoriesTitle}>Categorías</Text>
-            <ScrollView showsVerticalScrollIndicator={false}>
-              {categories.map(category => (
-                <TouchableOpacity
-                  key={category}
-                  style={[
-                    styles.categoryItem,
-                    selectedCategory === category && styles.selectedCategoryItem,
-                  ]}
-                  onPress={() => setSelectedCategory(category)}
-                >
-                  <Text style={[
-                    styles.categoryText,
-                    selectedCategory === category && styles.selectedCategoryText,
-                  ]}>
-                    {category === 'all' ? 'Todos los productos' : category}
-                  </Text>
-                </TouchableOpacity>
-              ))}
+            <ScrollView 
+              horizontal 
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.categoriesScrollContainer}
+            >
+              {categories.map(category => {
+                const isSelected = selectedCategory === category;
+                const isPressed = pressedCategory === category;
+                const categoryName = category === 'all' ? 'Todos los productos' : category;
+                const iconName = categoryIcons[category] || 'restaurant';
+                
+                return (
+                  <TouchableOpacity
+                    key={category}
+                    style={[
+                      styles.categoryButton,
+                      isSelected && styles.selectedCategoryButton,
+                      isPressed && !isSelected && styles.pressedCategoryButton,
+                    ]}
+                    onPress={() => setSelectedCategory(category)}
+                    onPressIn={() => setPressedCategory(category)}
+                    onPressOut={() => setPressedCategory(null)}
+                    activeOpacity={1}
+                  >
+                    <Ionicons 
+                      name={iconName as any} 
+                      size={isTablet ? 18 : 16} 
+                      color={isSelected ? '#ffffff' : isPressed ? '#ffffff' : '#FF6B6B'} 
+                    />
+                    <Text style={[
+                      styles.categoryButtonText,
+                      isSelected && styles.selectedCategoryButtonText,
+                      isPressed && !isSelected && styles.pressedCategoryButtonText,
+                    ]}>
+                      {categoryName}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
             </ScrollView>
           </View>
         </View>
@@ -342,23 +374,43 @@ const styles = StyleSheet.create({
     color: '#111827',
     marginBottom: 16,
   },
-  categoryItem: {
-    paddingVertical: isTablet ? 16 : 12,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    marginBottom: 8,
-    backgroundColor: '#f9fafb',
+  categoriesScrollContainer: {
+    paddingHorizontal: 4,
+    paddingBottom: 8,
   },
-  selectedCategoryItem: {
-    backgroundColor: '#3b82f6',
+  categoryButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: isTablet ? 12 : 8,
+    paddingHorizontal: isTablet ? 16 : 16,
+    borderRadius: 6,
+    marginRight: 8,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 107, 107, 0.3)', // gastro-primary/30
+    minWidth: isTablet ? 140 : 120,
   },
-  categoryText: {
-    fontSize: isTablet ? 16 : 14,
-    color: '#374151',
+  selectedCategoryButton: {
+    backgroundColor: '#FF6B6B',
+    borderColor: '#FF6B6B',
   },
-  selectedCategoryText: {
+  pressedCategoryButton: {
+    backgroundColor: 'rgba(255, 107, 107, 0.1)', // gastro-primary/10
+    borderColor: 'rgba(255, 107, 107, 0.3)',
+  },
+  categoryButtonText: {
+    fontSize: isTablet ? 14 : 14,
+    color: '#FF6B6B',
+    fontWeight: '500',
+    marginLeft: 8,
+  },
+  selectedCategoryButtonText: {
     color: '#ffffff',
-    fontWeight: '600',
+    fontWeight: '500',
+  },
+  pressedCategoryButtonText: {
+    color: '#FF6B6B',
+    fontWeight: '500',
   },
   menuList: {
     flex: 1,
