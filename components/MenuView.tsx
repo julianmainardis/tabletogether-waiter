@@ -260,80 +260,80 @@ export const MenuView: React.FC<MenuViewProps> = ({
         </View>
       </View>
 
-      <View style={styles.mainContent}>
-        {/* Panel izquierdo con categorías */}
-        <View style={styles.leftPanel}>
-          {isModifying && (
-            <View style={styles.currentOrderSection}>
-              <Text style={styles.currentOrderTitle}>Pedido Actual</Text>
-              {currentOrder.length > 0 ? (
-                currentOrder.map(item => (
-                  <View key={item.id} style={styles.currentOrderItem}>
-                    <Text style={styles.currentOrderItemText}>
-                      {item.name} x{item.quantity} - €{(item.price * item.quantity).toFixed(2)}
-                    </Text>
-                  </View>
-                ))
-              ) : (
-                <Text style={styles.noOrderText}>No hay pedido actual</Text>
-              )}
-            </View>
+      {/* Sección de pedido actual (solo cuando se está modificando) */}
+      {isModifying && (
+        <View style={styles.currentOrderSection}>
+          <Text style={styles.currentOrderTitle}>Pedido Actual</Text>
+          {currentOrder.length > 0 ? (
+            currentOrder.map(item => (
+              <View key={item.id} style={styles.currentOrderItem}>
+                <Text style={styles.currentOrderItemText}>
+                  {item.name} x{item.quantity} - €{(item.price * item.quantity).toFixed(2)}
+                </Text>
+              </View>
+            ))
+          ) : (
+            <Text style={styles.noOrderText}>No hay pedido actual</Text>
           )}
-          
-          <View style={styles.categoriesSection}>
-            <Text style={styles.categoriesTitle}>Categorías</Text>
+        </View>
+      )}
+
+      {/* Barra de categorías */}
+      <View style={styles.categoriesSection}>
+        <ScrollView 
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.categoriesScrollContainer}
+        >
+          {allCategories.map((category, index) => {
+            const isSelected = selectedCategory === category;
+            const categoryName = category === 'all' ? 'Todos' : category;
+            const iconName = categoryIcons[category] || 'restaurant';
             
-            <ScrollView 
-              showsVerticalScrollIndicator={false}
-              contentContainerStyle={styles.categoriesScrollContainer}
-            >
-              {allCategories.map((category, index) => {
-                const isSelected = selectedCategory === category;
-                const categoryName = category === 'all' ? 'Todos los productos' : category;
-                const iconName = categoryIcons[category] || 'restaurant';
-                
-                return (
-                  <TouchableOpacity
-                    key={`category-${category}`}
+            return (
+              <TouchableOpacity
+                key={`category-${category}`}
+                style={[
+                  styles.categoryButton,
+                  isSelected && styles.selectedCategoryButton,
+                ]}
+                onPress={() => {
+                  console.log(`Category clicked: ${category}`);
+                  setSelectedCategory(category);
+                }}
+              >
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', flex: 1 }}>
+                  <Ionicons 
+                    name={iconName as any} 
+                    size={isTablet ? 16 : 14} 
+                    color={isSelected ? '#ffffff' : '#FF6B6B'} 
+                  />
+                  <Text 
                     style={[
-                      styles.categoryButton,
-                      isSelected && styles.selectedCategoryButton,
-                    ]}
-                    onPress={() => {
-                      console.log(`Category clicked: ${category}`);
-                      setSelectedCategory(category);
-                    }}
-                  >
-                    <Ionicons 
-                      name={iconName as any} 
-                      size={isTablet ? 18 : 16} 
-                      color={isSelected ? '#ffffff' : '#FF6B6B'} 
-                    />
-                    <Text style={[
                       styles.categoryButtonText,
                       isSelected && styles.selectedCategoryButtonText,
-                    ]}>
-                      {categoryName}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
-          </View>
-        </View>
-
-        {/* Panel derecho con productos */}
-        <View style={styles.rightPanel}>
-          <ScrollView style={styles.menuList} showsVerticalScrollIndicator={false}>
-            <View style={styles.menuGrid}>
-              {filteredProducts.map((product, index) => (
-                <View key={product.id} style={styles.menuItemWrapper}>
-                  {renderMenuItem(product)}
+                    ]}
+                  >
+                    {categoryName}
+                  </Text>
                 </View>
-              ))}
-            </View>
-          </ScrollView>
-        </View>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+      </View>
+
+      {/* Lista de productos */}
+      <View style={styles.productsContainer}>
+        <ScrollView style={styles.menuList} showsVerticalScrollIndicator={false}>
+          <View style={styles.menuGrid}>
+            {filteredProducts.map((product, index) => (
+              <View key={product.id} style={styles.menuItemWrapper}>
+                {renderMenuItem(product)}
+              </View>
+            ))}
+          </View>
+        </ScrollView>
       </View>
 
       {Object.keys(selectedItems).length > 0 && (
@@ -410,62 +410,57 @@ const styles = StyleSheet.create({
     fontSize: isTablet ? 16 : 14,
     color: '#6b7280',
   },
-  mainContent: {
-    flex: 1,
-    flexDirection: isTablet ? 'row' : 'column',
-  },
-  leftPanel: {
-    width: isTablet ? 250 : '100%',
-    backgroundColor: '#ffffff',
-    borderRightWidth: isTablet ? 1 : 0,
-    borderRightColor: '#e5e7eb',
-  },
-  rightPanel: {
-    flex: 1,
-    backgroundColor: '#f9fafb',
-  },
   categoriesSection: {
     padding: isTablet ? 20 : 16,
-  },
-  categoriesTitle: {
-    fontSize: isTablet ? 18 : 16,
-    fontWeight: '600',
-    color: '#111827',
-    marginBottom: 16,
+    backgroundColor: '#ffffff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
   },
   categoriesScrollContainer: {
     paddingHorizontal: 16,
     paddingBottom: 8,
-    flexDirection: 'column',
-    alignItems: 'stretch',
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: 8,
   },
   categoryButton: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     paddingVertical: isTablet ? 12 : 8,
     paddingHorizontal: isTablet ? 16 : 12,
     borderRadius: 6,
     backgroundColor: '#ffffff',
     borderWidth: 2,
     borderColor: '#FF6B6B',
-    width: '100%',
-    marginBottom: 8,
-    minHeight: 40,
+    width: isTablet ? 140 : 120,
+    height: isTablet ? 50 : 44,
+    minHeight: isTablet ? 50 : 44,
+    maxHeight: isTablet ? 50 : 44,
+    flexWrap: 'wrap',
   },
   selectedCategoryButton: {
     backgroundColor: '#FF6B6B',
     borderColor: '#FF6B6B',
   },
   categoryButtonText: {
-    fontSize: isTablet ? 14 : 14,
+    fontSize: isTablet ? 12 : 11,
     color: '#FF6B6B',
     fontWeight: '500',
-    marginLeft: 8,
+    marginLeft: 4,
+    textAlign: 'center',
+    flexShrink: 1,
+    flexWrap: 'wrap',
+    alignSelf: 'center',
+    textAlignVertical: 'center',
   },
   selectedCategoryButtonText: {
     color: '#ffffff',
     fontWeight: '500',
+  },
+  productsContainer: {
+    flex: 1,
+    backgroundColor: '#f9fafb',
   },
   menuList: {
     flex: 1,
