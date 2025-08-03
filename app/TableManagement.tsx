@@ -313,14 +313,6 @@ export default function TableManagement() {
             </View>
 
             <View style={styles.tableInfo}>
-             
-              
-              {table.waiter && (
-                <Text style={[styles.tableInfoText, { color: config.textColor }]}>
-                  Camarero: {table.waiter}
-                </Text>
-              )}
-
               {table.timeOccupied && (
                 <Text style={[styles.tableInfoText, { color: config.textColor }]}>
                   Tiempo: {table.timeOccupied}
@@ -335,15 +327,6 @@ export default function TableManagement() {
                   <Text style={styles.paidAmount}> (-€{table.paidAmount})</Text>
                 )}
               </Text>
-            )}
-
-            {hasAlert && (
-              <View style={styles.alertIndicator}>
-                <Ionicons name="notifications" size={isTablet ? 18 : 16} color="#ef4444" />
-                <Text style={styles.alertCount}>
-                  {activeAlerts.filter((alert) => alert.tableId === table.id).length}
-                </Text>
-              </View>
             )}
           </CardContent>
         </Card>
@@ -765,23 +748,15 @@ export default function TableManagement() {
           <View style={styles.paymentModalContent}>
             {selectedTable && (
               <>
-                <View style={styles.paymentInfo}>
-                  <Text style={styles.paymentInfoText}>
-                    <Text style={styles.paymentLabel}>Mesa:</Text> {selectedTable.number}
+                <Text style={styles.modalTitle}>Mesa {selectedTable.number}</Text>
+                <Text style={styles.modalSubtitle}>
+                  Total: €{selectedTable.orderTotal?.toFixed(2) || '0.00'}
+                </Text>
+                {selectedTable.paidAmount && selectedTable.paidAmount > 0 && (
+                  <Text style={styles.modalSubtitle}>
+                    Pagado: €{selectedTable.paidAmount.toFixed(2)}
                   </Text>
-                  <Text style={styles.paymentInfoText}>
-                    <Text style={styles.paymentLabel}>Total cuenta:</Text> €{selectedTable.orderTotal}
-                  </Text>
-                  {selectedTable.paidAmount && (
-                    <Text style={styles.paymentInfoText}>
-                      <Text style={styles.paymentLabel}>Pagado:</Text> €{selectedTable.paidAmount}
-                    </Text>
-                  )}
-                  <Text style={styles.paymentInfoText}>
-                    <Text style={styles.paymentLabel}>Pendiente:</Text> €
-                    {(selectedTable.orderTotal || 0) - (selectedTable.paidAmount || 0)}
-                  </Text>
-                </View>
+                )}
 
                 <View style={styles.paymentOptions}>
                   <Text style={styles.paymentOptionsTitle}>Opciones de pago:</Text>
@@ -995,6 +970,11 @@ const styles = StyleSheet.create({
     fontSize: isTablet ? 18 : 16,
     fontWeight: 'bold',
   },
+  tableStatus: {
+    fontSize: isTablet ? 12 : 10,
+    color: '#6b7280',
+    marginTop: 2,
+  },
   statusBadge: {
     fontSize: isTablet ? 10 : 8,
   },
@@ -1183,5 +1163,12 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff',
     width: '60%',
     textAlign: 'center',
+  },
+  modalTitle: {
+    fontSize: isTablet ? 20 : 18,
+    fontWeight: 'bold',
+    color: '#111827',
+    textAlign: 'center',
+    marginBottom: 8,
   },
 }); 

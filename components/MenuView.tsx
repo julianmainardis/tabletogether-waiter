@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -8,20 +8,14 @@ import {
   SafeAreaView,
   StatusBar,
   Dimensions,
+  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Button } from './ui/button';
 import { Card, CardContent } from './ui/card';
 import { Badge } from './ui/badge';
-
-interface MenuItem {
-  id: string;
-  name: string;
-  description: string;
-  price: number;
-  category: string;
-  available: boolean;
-}
+import { ProductDetailDialog } from './ProductDetailDialog';
+import { productService, Product, Category } from '../services/productService';
 
 interface MenuViewProps {
   tableId: number;
@@ -44,49 +38,6 @@ const categoryIcons: Record<string, string> = {
   'Bebidas': 'beer',
 };
 
-const mockMenuItems: MenuItem[] = [
-  {
-    id: '1',
-    name: 'Jamón Ibérico',
-    description: 'Jamón ibérico de bellota de 24 meses',
-    price: 18.50,
-    category: 'Entrantes',
-    available: true,
-  },
-  {
-    id: '2',
-    name: 'Paella Valenciana',
-    description: 'Paella tradicional con pollo y conejo',
-    price: 22.00,
-    category: 'Platos principales',
-    available: true,
-  },
-  {
-    id: '3',
-    name: 'Ensalada César',
-    description: 'Lechuga, crutones, parmesano y aderezo César',
-    price: 12.50,
-    category: 'Entrantes',
-    available: true,
-  },
-  {
-    id: '4',
-    name: 'Solomillo a la parrilla',
-    description: 'Solomillo de ternera con patatas y verduras',
-    price: 28.00,
-    category: 'Platos principales',
-    available: true,
-  },
-  {
-    id: '5',
-    name: 'Tiramisú',
-    description: 'Postre italiano con café y mascarpone',
-    price: 8.50,
-    category: 'Postres',
-    available: true,
-  },
-];
-
 export const MenuView: React.FC<MenuViewProps> = ({
   tableId,
   diners,
@@ -95,6 +46,9 @@ export const MenuView: React.FC<MenuViewProps> = ({
   onBack,
   onConfirmOrder,
 }) => {
+  const [products, setProducts] = useState<Product[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [loading, setLoading] = useState(true);
   const [selectedItems, setSelectedItems] = useState<Record<string, number>>(() => {
     // Si estamos modificando, inicializar con el pedido actual
     if (isModifying && currentOrder.length > 0) {
@@ -108,13 +62,58 @@ export const MenuView: React.FC<MenuViewProps> = ({
     return {};
   });
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
-  const [pressedCategory, setPressedCategory] = useState<string | null>(null);
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [showProductDetail, setShowProductDetail] = useState(false);
 
-  const categories = ['all', ...Array.from(new Set(mockMenuItems.map(item => item.category)))];
+  // Cargar productos y categorías
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        setLoading(true);
+        console.log('🔄 Starting to load data...');
+        
+        const [productsData, categoriesData] = await Promise.all([
+          productService.getProducts(),
+          productService.getCategories()
+        ]);
+        
+        console.log('📦 Products loaded:', productsData.length);
+        console.log('📂 Categories loaded:', categoriesData);
+        console.log('📂 Categories names:', categoriesData.map(cat => cat.name));
+        
+        setProducts(productsData);
+        setCategories(categoriesData);
+        
+        console.log('✅ Data loaded successfully');
+      } catch (error) {
+        console.error('❌ Error loading menu data:', error);
+        Alert.alert('Error', 'No se pudieron cargar los productos');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadData();
+  }, []);
+
+  const allCategories = ['all', ...categories.map(cat => cat.name)];
+  console.log('🏷️ All categories:', allCategories);
+  console.log('🔍 Selected category:', selectedCategory);
+  console.log('📦 Total products:', products.length);
+  console.log('📂 Categories from backend:', categories.map(cat => ({ id: cat.id, name: cat.name })));
+  console.log('🎯 About to render', allCategories.length, 'category buttons');
   
-  const filteredItems = selectedCategory === 'all' 
-    ? mockMenuItems 
-    : mockMenuItems.filter(item => item.category === selectedCategory);
+  const filteredProducts = selectedCategory === 'all' 
+    ? products 
+    : products.filter(product => {
+        const productCategory = categories.find(cat => cat.id === product.category_id);
+        const matches = productCategory?.name === selectedCategory;
+        console.log(`Product ${product.name} - category_id: ${product.category_id} - category_name: ${productCategory?.name} - selected: ${selectedCategory} - matches: ${matches}`);
+        return matches;
+      });
+  
+  console.log('📋 Filtered products count:', filteredProducts.length);
+  console.log('📋 Filtered products:', filteredProducts.map(p => p.name));
 
   const addItem = (itemId: string) => {
     setSelectedItems(prev => ({
@@ -143,16 +142,30 @@ export const MenuView: React.FC<MenuViewProps> = ({
     });
   };
 
+  const handleProductPress = (product: Product) => {
+    console.log('🎯 Product pressed:', product.name, product.id);
+    setSelectedProduct(product);
+    setShowProductDetail(true);
+  };
+
+  const handleAddToOrder = (productId: string, quantity: number, customizations: string[]) => {
+    console.log('📦 Adding to order:', productId, quantity, customizations);
+    setSelectedItems(prev => ({
+      ...prev,
+      [productId]: (prev[productId] || 0) + quantity,
+    }));
+  };
+
   const getTotalPrice = () => {
     return Object.entries(selectedItems).reduce((total, [itemId, quantity]) => {
-      const item = mockMenuItems.find(i => i.id === itemId);
+      const item = products.find(i => i.id === itemId);
       return total + (item?.price || 0) * quantity;
     }, 0);
   };
 
   const getSelectedItemsList = () => {
     return Object.entries(selectedItems).map(([itemId, quantity]) => {
-      const item = mockMenuItems.find(i => i.id === itemId);
+      const item = products.find(i => i.id === itemId);
       if (!item) return null;
       return {
         ...item,
@@ -161,42 +174,75 @@ export const MenuView: React.FC<MenuViewProps> = ({
     }).filter((item): item is NonNullable<typeof item> => item !== null);
   };
 
-  const renderMenuItem = (item: MenuItem) => {
-    const quantity = selectedItems[item.id] || 0;
+  const renderMenuItem = (product: Product) => {
+    const quantity = selectedItems[product.id] || 0;
     
     return (
-      <Card key={item.id} style={styles.menuItem}>
-        <CardContent style={styles.menuItemContent}>
-          <View style={styles.menuItemHeader}>
-            <View style={styles.menuItemInfo}>
-              <Text style={styles.menuItemName}>{item.name}</Text>
-              <Text style={styles.menuItemDescription}>{item.description}</Text>
-              <Text style={styles.menuItemPrice}>€{item.price.toFixed(2)}</Text>
-            </View>
-            <View style={styles.quantityControls}>
-              {quantity > 0 && (
+      <TouchableOpacity
+        key={product.id}
+        onPress={() => handleProductPress(product)}
+        activeOpacity={0.7}
+        style={styles.menuItemTouchable}
+      >
+        <Card style={styles.menuItem}>
+          <CardContent style={styles.menuItemContent}>
+            <View style={styles.menuItemHeader}>
+              <View style={styles.menuItemInfo}>
+                <Text style={styles.menuItemName}>{product.name}</Text>
+                {product.description && (
+                  <Text style={styles.menuItemDescription} numberOfLines={2}>
+                    {product.description}
+                  </Text>
+                )}
+                <Text style={styles.menuItemPrice}>€{product.price.toFixed(2)}</Text>
+              </View>
+              <View style={styles.quantityControls}>
+                {quantity > 0 && (
+                  <TouchableOpacity
+                    onPress={() => removeItem(product.id)}
+                    style={styles.quantityButton}
+                  >
+                    <Ionicons name="remove" size={isTablet ? 24 : 20} color="#ef4444" />
+                  </TouchableOpacity>
+                )}
+                {quantity > 0 && (
+                  <Text style={styles.quantityText}>{quantity}</Text>
+                )}
                 <TouchableOpacity
-                  onPress={() => removeItem(item.id)}
+                  onPress={() => addItem(product.id)}
                   style={styles.quantityButton}
                 >
-                  <Ionicons name="remove" size={isTablet ? 24 : 20} color="#ef4444" />
+                  <Ionicons name="add" size={isTablet ? 24 : 20} color="#10b981" />
                 </TouchableOpacity>
-              )}
-              {quantity > 0 && (
-                <Text style={styles.quantityText}>{quantity}</Text>
-              )}
-              <TouchableOpacity
-                onPress={() => addItem(item.id)}
-                style={styles.quantityButton}
-              >
-                <Ionicons name="add" size={isTablet ? 24 : 20} color="#10b981" />
-              </TouchableOpacity>
+              </View>
             </View>
-          </View>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      </TouchableOpacity>
     );
   };
+
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <StatusBar barStyle="dark-content" backgroundColor="#f9fafb" />
+        <View style={styles.header}>
+          <TouchableOpacity onPress={onBack} style={styles.backButton}>
+            <Ionicons name="arrow-back" size={isTablet ? 28 : 24} color="#374151" />
+          </TouchableOpacity>
+          <View style={styles.headerInfo}>
+            <Text style={styles.headerTitle}>
+              {isModifying ? 'Modificar Pedido' : 'Menú'} - Mesa {tableId}
+            </Text>
+            <Text style={styles.headerSubtitle}>{diners} comensales</Text>
+          </View>
+        </View>
+        <View style={styles.loadingContainer}>
+          <Text style={styles.loadingText}>Cargando productos...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -236,39 +282,36 @@ export const MenuView: React.FC<MenuViewProps> = ({
           
           <View style={styles.categoriesSection}>
             <Text style={styles.categoriesTitle}>Categorías</Text>
+            
             <ScrollView 
-              horizontal 
-              showsHorizontalScrollIndicator={false}
+              showsVerticalScrollIndicator={false}
               contentContainerStyle={styles.categoriesScrollContainer}
             >
-              {categories.map(category => {
+              {allCategories.map((category, index) => {
                 const isSelected = selectedCategory === category;
-                const isPressed = pressedCategory === category;
                 const categoryName = category === 'all' ? 'Todos los productos' : category;
                 const iconName = categoryIcons[category] || 'restaurant';
                 
                 return (
                   <TouchableOpacity
-                    key={category}
+                    key={`category-${category}`}
                     style={[
                       styles.categoryButton,
                       isSelected && styles.selectedCategoryButton,
-                      isPressed && !isSelected && styles.pressedCategoryButton,
                     ]}
-                    onPress={() => setSelectedCategory(category)}
-                    onPressIn={() => setPressedCategory(category)}
-                    onPressOut={() => setPressedCategory(null)}
-                    activeOpacity={1}
+                    onPress={() => {
+                      console.log(`Category clicked: ${category}`);
+                      setSelectedCategory(category);
+                    }}
                   >
                     <Ionicons 
                       name={iconName as any} 
                       size={isTablet ? 18 : 16} 
-                      color={isSelected ? '#ffffff' : isPressed ? '#ffffff' : '#FF6B6B'} 
+                      color={isSelected ? '#ffffff' : '#FF6B6B'} 
                     />
                     <Text style={[
                       styles.categoryButtonText,
                       isSelected && styles.selectedCategoryButtonText,
-                      isPressed && !isSelected && styles.pressedCategoryButtonText,
                     ]}>
                       {categoryName}
                     </Text>
@@ -283,7 +326,11 @@ export const MenuView: React.FC<MenuViewProps> = ({
         <View style={styles.rightPanel}>
           <ScrollView style={styles.menuList} showsVerticalScrollIndicator={false}>
             <View style={styles.menuGrid}>
-              {filteredItems.map(renderMenuItem)}
+              {filteredProducts.map((product, index) => (
+                <View key={product.id} style={styles.menuItemWrapper}>
+                  {renderMenuItem(product)}
+                </View>
+              ))}
             </View>
           </ScrollView>
         </View>
@@ -319,6 +366,18 @@ export const MenuView: React.FC<MenuViewProps> = ({
           />
         </View>
       )}
+
+      {/* Product Detail Dialog */}
+      <ProductDetailDialog
+        product={selectedProduct}
+        isVisible={showProductDetail}
+        onClose={() => {
+          console.log('🔒 Closing ProductDetailDialog');
+          setShowProductDetail(false);
+          setSelectedProduct(null);
+        }}
+        onAddToOrder={handleAddToOrder}
+      />
     </SafeAreaView>
   );
 };
@@ -375,28 +434,28 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   categoriesScrollContainer: {
-    paddingHorizontal: 4,
+    paddingHorizontal: 16,
     paddingBottom: 8,
+    flexDirection: 'column',
+    alignItems: 'stretch',
+    gap: 8,
   },
   categoryButton: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: isTablet ? 12 : 8,
-    paddingHorizontal: isTablet ? 16 : 16,
+    paddingHorizontal: isTablet ? 16 : 12,
     borderRadius: 6,
-    marginRight: 8,
     backgroundColor: '#ffffff',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 107, 107, 0.3)', // gastro-primary/30
-    minWidth: isTablet ? 140 : 120,
+    borderWidth: 2,
+    borderColor: '#FF6B6B',
+    width: '100%',
+    marginBottom: 8,
+    minHeight: 40,
   },
   selectedCategoryButton: {
     backgroundColor: '#FF6B6B',
     borderColor: '#FF6B6B',
-  },
-  pressedCategoryButton: {
-    backgroundColor: 'rgba(255, 107, 107, 0.1)', // gastro-primary/10
-    borderColor: 'rgba(255, 107, 107, 0.3)',
   },
   categoryButtonText: {
     fontSize: isTablet ? 14 : 14,
@@ -408,10 +467,6 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontWeight: '500',
   },
-  pressedCategoryButtonText: {
-    color: '#FF6B6B',
-    fontWeight: '500',
-  },
   menuList: {
     flex: 1,
     padding: isTablet ? 24 : 16,
@@ -420,11 +475,24 @@ const styles = StyleSheet.create({
     flexDirection: isTablet ? 'row' : 'column',
     flexWrap: 'wrap',
     justifyContent: 'space-between',
+    alignItems: 'flex-start',
   },
-  menuItem: {
+  menuItemWrapper: {
     width: isTablet ? '48%' : '100%',
     marginBottom: 16,
-    marginRight: isTablet ? 0 : 0,
+  },
+  menuItem: {
+    width: '100%',
+    backgroundColor: '#ffffff',
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 3.84,
+    elevation: 5,
   },
   menuItemContent: {
     padding: isTablet ? 20 : 16,
@@ -433,6 +501,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
+    minHeight: isTablet ? 80 : 60,
   },
   menuItemInfo: {
     flex: 1,
@@ -445,9 +514,10 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   menuItemDescription: {
-    fontSize: isTablet ? 14 : 14,
+    fontSize: isTablet ? 14 : 12,
     color: '#6b7280',
     marginBottom: 8,
+    lineHeight: 18,
   },
   menuItemPrice: {
     fontSize: isTablet ? 18 : 16,
@@ -541,5 +611,19 @@ const styles = StyleSheet.create({
     fontSize: isTablet ? 14 : 12,
     color: '#6b7280',
     fontStyle: 'italic',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#f9fafb',
+  },
+  loadingText: {
+    fontSize: 18,
+    color: '#6b7280',
+  },
+  menuItemTouchable: {
+    width: '100%',
+    marginBottom: 16,
   },
 }); 
