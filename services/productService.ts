@@ -18,6 +18,7 @@ export interface Product {
       id: string;
       name: string;
       price_adjustment: number;
+      customization_group?: string;
     };
   }>;
 }

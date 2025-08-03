@@ -9,6 +9,7 @@ import {
   Dimensions,
   ScrollView,
   Alert,
+  Modal,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Button } from './ui/button';
@@ -98,101 +99,127 @@ export const ProductDetailDialog: React.FC<ProductDetailDialogProps> = ({
   }, 0));
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
-      
-      <View style={styles.header}>
-        <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-          <Ionicons name="close" size={isTablet ? 28 : 24} color="#374151" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>{product.name}</Text>
-        <View style={styles.placeholder} />
-      </View>
+    <Modal
+      visible={isVisible}
+      animationType="slide"
+      presentationStyle="pageSheet"
+      onRequestClose={onClose}
+    >
+      <TouchableOpacity 
+        style={styles.modalOverlay} 
+        activeOpacity={1} 
+        onPress={onClose}
+      >
+        <TouchableOpacity 
+          style={styles.modalContent} 
+          activeOpacity={1} 
+          onPress={(e) => e.stopPropagation()}
+        >
+          <SafeAreaView style={styles.container}>
+            <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
+            
+            <View style={styles.header}>
+              <TouchableOpacity onPress={onClose} style={styles.closeButton}>
+                <Ionicons name="close" size={isTablet ? 28 : 24} color="#374151" />
+              </TouchableOpacity>
+              <Text style={styles.headerTitle}>{product?.name}</Text>
+              <View style={styles.placeholder} />
+            </View>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        {product.description && (
-          <View style={styles.descriptionSection}>
-            <Text style={styles.descriptionText}>{product.description}</Text>
-          </View>
-        )}
+            <View style={[
+              styles.content,
+              Object.entries(groupedCustomizations).length === 0 && styles.contentNoCustomizations
+            ]}>
+              {product?.description && (
+                <View style={styles.descriptionSection}>
+                  <Text style={styles.descriptionText}>{product.description}</Text>
+                </View>
+              )}
 
-        {/* Customizaciones */}
-        {Object.entries(groupedCustomizations).map(([group, groupCustoms]) => (
-          <Card key={group} style={styles.customizationCard}>
-            <CardContent style={styles.customizationContent}>
-              <Text style={styles.customizationTitle}>{group}</Text>
-              <View style={styles.customizationOptions}>
-                {groupCustoms.map((customization) => (
+              {/* Customizaciones */}
+              {Object.entries(groupedCustomizations).length > 0 && (
+                <View style={styles.customizationsContainer}>
+                  {Object.entries(groupedCustomizations).map(([group, groupCustoms]) => (
+                    <Card key={group} style={styles.customizationCard}>
+                      <CardContent style={styles.customizationContent}>
+                        <Text style={styles.customizationTitle}>{group}</Text>
+                        <View style={styles.customizationOptions}>
+                          {groupCustoms.map((customization) => (
+                            <TouchableOpacity
+                              key={customization.customization_id}
+                              style={[
+                                styles.customizationOption,
+                                selectedCustomizations[group] === customization.customization_id && 
+                                styles.selectedCustomizationOption
+                              ]}
+                              onPress={() => handleCustomizationChange(group, customization.customization_id)}
+                            >
+                              <View style={styles.customizationOptionContent}>
+                                <Text style={[
+                                  styles.customizationOptionText,
+                                  selectedCustomizations[group] === customization.customization_id && 
+                                  styles.selectedCustomizationOptionText
+                                ]}>
+                                  {customization.customizations.name}
+                                </Text>
+                                {customization.customizations.price_adjustment > 0 && (
+                                  <Text style={[
+                                    styles.priceAdjustment,
+                                    selectedCustomizations[group] === customization.customization_id && 
+                                    styles.selectedPriceAdjustment
+                                  ]}>
+                                    (+€{customization.customizations.price_adjustment.toFixed(2)})
+                                  </Text>
+                                )}
+                              </View>
+                              {selectedCustomizations[group] === customization.customization_id && (
+                                <Ionicons name="checkmark-circle" size={20} color="#10b981" />
+                              )}
+                            </TouchableOpacity>
+                          ))}
+                        </View>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </View>
+              )}
+            </View>
+
+            <View style={styles.footer}>
+              <View style={styles.quantitySection}>
+                <Text style={styles.quantityLabel}>Cantidad:</Text>
+                <View style={styles.quantityControls}>
                   <TouchableOpacity
-                    key={customization.customization_id}
-                    style={[
-                      styles.customizationOption,
-                      selectedCustomizations[group] === customization.customization_id && 
-                      styles.selectedCustomizationOption
-                    ]}
-                    onPress={() => handleCustomizationChange(group, customization.customization_id)}
+                    style={styles.quantityButton}
+                    onPress={() => setQuantity(Math.max(1, quantity - 1))}
                   >
-                    <View style={styles.customizationOptionContent}>
-                      <Text style={[
-                        styles.customizationOptionText,
-                        selectedCustomizations[group] === customization.customization_id && 
-                        styles.selectedCustomizationOptionText
-                      ]}>
-                        {customization.customizations.name}
-                      </Text>
-                      {customization.customizations.price_adjustment > 0 && (
-                        <Text style={[
-                          styles.priceAdjustment,
-                          selectedCustomizations[group] === customization.customization_id && 
-                          styles.selectedPriceAdjustment
-                        ]}>
-                          (+€{customization.customizations.price_adjustment.toFixed(2)})
-                        </Text>
-                      )}
-                    </View>
-                    {selectedCustomizations[group] === customization.customization_id && (
-                      <Ionicons name="checkmark-circle" size={20} color="#10b981" />
-                    )}
+                    <Ionicons name="remove" size={isTablet ? 24 : 20} color="#ef4444" />
                   </TouchableOpacity>
-                ))}
+                  <Text style={styles.quantityText}>{quantity}</Text>
+                  <TouchableOpacity
+                    style={styles.quantityButton}
+                    onPress={() => setQuantity(quantity + 1)}
+                  >
+                    <Ionicons name="add" size={isTablet ? 24 : 20} color="#10b981" />
+                  </TouchableOpacity>
+                </View>
               </View>
-            </CardContent>
-          </Card>
-        ))}
-      </ScrollView>
-
-      <View style={styles.footer}>
-        <View style={styles.quantitySection}>
-          <Text style={styles.quantityLabel}>Cantidad:</Text>
-          <View style={styles.quantityControls}>
-            <TouchableOpacity
-              style={styles.quantityButton}
-              onPress={() => setQuantity(Math.max(1, quantity - 1))}
-            >
-              <Ionicons name="remove" size={isTablet ? 24 : 20} color="#ef4444" />
-            </TouchableOpacity>
-            <Text style={styles.quantityText}>{quantity}</Text>
-            <TouchableOpacity
-              style={styles.quantityButton}
-              onPress={() => setQuantity(quantity + 1)}
-            >
-              <Ionicons name="add" size={isTablet ? 24 : 20} color="#10b981" />
-            </TouchableOpacity>
-          </View>
-        </View>
-        
-        <View style={styles.priceSection}>
-          <Text style={styles.priceLabel}>Precio total:</Text>
-          <Text style={styles.priceText}>€{(totalPrice * quantity).toFixed(2)}</Text>
-        </View>
-        
-        <Button
-          title="Agregar al pedido"
-          onPress={handleAddToOrder}
-          style={styles.addButton}
-        />
-      </View>
-    </SafeAreaView>
+              
+              <View style={styles.priceSection}>
+                <Text style={styles.priceLabel}>Precio total:</Text>
+                <Text style={styles.priceText}>€{(totalPrice * quantity).toFixed(2)}</Text>
+              </View>
+              
+              <Button
+                title="Agregar al pedido"
+                onPress={handleAddToOrder}
+                style={styles.addButton}
+              />
+            </View>
+          </SafeAreaView>
+        </TouchableOpacity>
+      </TouchableOpacity>
+    </Modal>
   );
 };
 
@@ -225,6 +252,12 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     padding: isTablet ? 24 : 16,
+  },
+  contentNoCustomizations: {
+    justifyContent: 'space-between',
+  },
+  customizationsContainer: {
+    flex: 1,
   },
   descriptionSection: {
     marginBottom: 20,
@@ -337,5 +370,18 @@ const styles = StyleSheet.create({
   },
   addButton: {
     backgroundColor: '#FF6B6B',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#ffffff',
+    borderRadius: 10,
+    overflow: 'hidden',
   },
 }); 

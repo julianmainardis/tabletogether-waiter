@@ -488,19 +488,27 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 3.84,
     elevation: 5,
+    height: isTablet ? 120 : 100,
+    minHeight: isTablet ? 120 : 100,
+    maxHeight: isTablet ? 120 : 100,
   },
   menuItemContent: {
     padding: isTablet ? 20 : 16,
+    flex: 1,
+    justifyContent: 'space-between',
   },
   menuItemHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    minHeight: isTablet ? 80 : 60,
+    flex: 1,
+    height: '100%',
   },
   menuItemInfo: {
     flex: 1,
     marginRight: 12,
+    justifyContent: 'space-between',
+    height: '100%',
   },
   menuItemName: {
     fontSize: isTablet ? 18 : 16,
@@ -513,11 +521,13 @@ const styles = StyleSheet.create({
     color: '#6b7280',
     marginBottom: 8,
     lineHeight: 18,
+    flex: 1,
   },
   menuItemPrice: {
     fontSize: isTablet ? 18 : 16,
     fontWeight: 'bold',
     color: '#10b981',
+    marginTop: 'auto',
   },
   quantityControls: {
     flexDirection: 'row',
