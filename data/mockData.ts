@@ -1,4 +1,4 @@
-import { Table, TableAlert } from '../types/table';
+import { AlertType, Table, TableAlert } from '../types/table';
 
 export const initialTables: Table[] = Array.from({ length: 50 }, (_, i) => {
   const status = ["available", "occupied", "reserved"][Math.floor(Math.random() * 3)] as any;
@@ -42,16 +42,16 @@ export const createInitialAlerts = (tables: Table[]): TableAlert[] => {
     },
     ...(alertTables[1]
       ? [
-          {
-            id: "2",
-            tableId: alertTables[1].id,
-            type: "check-request",
-            message: "Cliente solicita la cuenta",
-            timestamp: new Date(Date.now() - 2 * 60000),
-            priority: "medium" as const,
-            resolved: false,
-          },
-        ]
+        {
+          id: "2",
+          tableId: alertTables[1].id,
+          type: "check-request" as AlertType,
+          message: "Cliente solicita la cuenta",
+          timestamp: new Date(Date.now() - 2 * 60000),
+          priority: "medium" as const,
+          resolved: false,
+        },
+      ]
       : []),
   ];
 };
@@ -90,6 +90,13 @@ export const alertConfig = {
     bgColor: "#ecfdf5",
     borderColor: "#10b981",
     label: "Pide la cuenta",
+    priority: "medium" as const,
+  },
+  "waiter-call": {
+    color: "#ef4444",
+    bgColor: "#fef2f2",
+    borderColor: "#ef4444",
+    label: "Llamada al camarero",
     priority: "medium" as const,
   },
   "assistance-needed": {

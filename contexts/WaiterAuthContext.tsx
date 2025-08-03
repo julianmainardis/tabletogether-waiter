@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { waiterAuthService } from '../services/waiterAuth';
+import { alertsService } from '../services/alertsService';
 import { WaiterUser, WaiterAuth } from '../types';
 
 interface WaiterAuthContextType {
@@ -28,6 +29,23 @@ export const WaiterAuthProvider: React.FC<WaiterAuthProviderProps> = ({ children
   useEffect(() => {
     checkAuthStatus();
   }, []);
+
+  // Inicializar alertsService cuando el usuario se autentica
+  useEffect(() => {
+    if (isAuthenticated && user) {
+      console.log('🔌 Inicializando alertsService para usuario autenticado');
+      console.log('👤 Usuario:', user);
+      
+      // Verificar que el alertsService esté conectado
+      if (!alertsService.isConnectedToServer()) {
+        console.log('🔄 Conectando alertsService...');
+        // El alertsService se inicializa automáticamente en el constructor
+        // pero podemos verificar su estado
+      }
+      
+      console.log('📊 Estado del alertsService:', alertsService.isConnectedToServer());
+    }
+  }, [isAuthenticated, user]);
 
   const checkAuthStatus = async () => {
     try {
@@ -72,6 +90,8 @@ export const WaiterAuthProvider: React.FC<WaiterAuthProviderProps> = ({ children
     try {
       setLoading(true);
       await waiterAuthService.logout();
+      // Desconectar el alertsService al hacer logout
+      alertsService.disconnect();
     } catch (error) {
       console.error('Error during logout:', error);
     } finally {

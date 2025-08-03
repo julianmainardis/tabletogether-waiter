@@ -10,12 +10,13 @@ import {
   FlatList,
   Dimensions,
   TextInput,
+  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Button } from '../components/ui/button';
 import { Card, CardContent } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
-import { Alert, AlertDescription } from '../components/ui/alert';
+import { Alert as UIAlert, AlertDescription } from '../components/ui/alert';
 import Modal from '../components/ui/Modal';
 import { MenuView } from '../components/MenuView';
 import { Table, TableStatus, TableAlert, AlertType } from '../types/table';
@@ -23,6 +24,7 @@ import { statusConfig, alertConfig } from '../data/mockData';
 import { useWaiterAuth } from '../contexts/WaiterAuthContext';
 import { useTables, TableStatus as RealTableStatus } from '../hooks/useTables';
 import { tableService } from '../services/tableService';
+import { alertsService } from '../services/alertsService';
 
 type ViewType = 'tables' | 'menu' | 'order-summary';
 
@@ -72,6 +74,63 @@ export default function TableManagement() {
       setTables(convertedTables);
     }
   }, [realTables, user]);
+
+  // Escuchar alertas en tiempo real
+  useEffect(() => {
+    console.log('🔌 Configurando listeners de alertas en TableManagement');
+    
+    const handleNewAlert = (alert: any) => {
+      console.log('🚨 Nueva alerta recibida en TableManagement:', alert);
+      console.log('📊 Estado actual de alertas:', alerts);
+      
+      // Agregar la alerta a la lista local
+      const newAlert = {
+        id: alert.alertId,
+        tableId: alert.tableNumber,
+        type: alert.alertType,
+        message: alert.message,
+        timestamp: new Date(alert.timestamp),
+        priority: alert.priority,
+        resolved: alert.resolved
+      };
+      
+      console.log('➕ Agregando nueva alerta:', newAlert);
+      setAlerts(prev => {
+        const updated = [...prev, newAlert];
+        console.log('📋 Lista actualizada de alertas:', updated);
+        return updated;
+      });
+    };
+
+    const handleAlertResolved = (data: any) => {
+      const { alertId } = data;
+      console.log('✅ Alerta resuelta en TableManagement:', alertId);
+      
+      // Marcar la alerta como resuelta
+      setAlerts(prev => prev.map(alert => 
+        alert.id === alertId ? { ...alert, resolved: true } : alert
+      ));
+    };
+
+    // Verificar si el servicio está conectado
+    console.log('🔍 Estado del alertsService:', {
+      isConnected: alertsService.isConnectedToServer()
+    });
+
+    // Verificar que el alertsService esté escuchando eventos
+    console.log('🎧 Configurando event listeners para alertas');
+    
+    // Agregar event listeners usando el servicio de alertas
+    alertsService.addEventListener('new-table-alert', handleNewAlert);
+    alertsService.addEventListener('alert-resolved', handleAlertResolved);
+
+    // Cleanup
+    return () => {
+      console.log('🧹 Limpiando listeners de alertas');
+      alertsService.removeEventListener('new-table-alert', handleNewAlert);
+      alertsService.removeEventListener('alert-resolved', handleAlertResolved);
+    };
+  }, []);
 
   // Filtrar mesas según el estado seleccionado
   const filteredTables = tables.filter(table => {
@@ -258,6 +317,38 @@ export default function TableManagement() {
     }
   };
 
+  const handleCallWaiter = async (table: Table) => {
+    try {
+      console.log('📞 Llamando al camarero para mesa:', table.number);
+      
+      // Crear alerta a través del servicio WebSocket
+      await alertsService.createAlert({
+        tableId: table.sessionId || `table-${table.number}`,
+        tableNumber: table.number,
+        alertType: 'waiter-call',
+        message: 'El cliente necesita atención del camarero',
+        priority: 'medium'
+      });
+      
+      console.log('✅ Alerta de camarero enviada exitosamente');
+      
+      // Mostrar confirmación al usuario
+      Alert.alert(
+        'Alerta enviada',
+        `Se ha enviado una alerta al camarero para la mesa ${table.number}`,
+        [{ text: 'OK' }]
+      );
+      
+    } catch (error) {
+      console.error('❌ Error al enviar alerta de camarero:', error);
+      Alert.alert(
+        'Error',
+        'No se pudo enviar la alerta. Verifica la conexión.',
+        [{ text: 'OK' }]
+      );
+    }
+  };
+
   const handleConfirmOrder = (items: any[]) => {
     if (selectedTableForMenu) {
       setTableOrders(prev => ({
@@ -422,7 +513,12 @@ export default function TableManagement() {
             <Text style={styles.noAlertsText}>No hay alertas activas</Text>
           ) : (
             activeAlerts.map((alert) => {
-              const config = alertConfig[alert.type];
+              const config = alertConfig[alert.type] || {
+                bgColor: '#f3f4f6',
+                borderColor: '#6b7280',
+                color: '#374151',
+                label: 'Alerta'
+              };
               return (
                 <View
                   key={alert.id}
@@ -520,9 +616,9 @@ export default function TableManagement() {
       {/* Manejo de errores */}
       {error && (
         <View style={styles.errorContainer}>
-          <Alert>
+          <UIAlert>
             <AlertDescription>{error}</AlertDescription>
-          </Alert>
+          </UIAlert>
           <Button
             title="Reintentar"
             onPress={refreshTables}
@@ -638,6 +734,16 @@ export default function TableManagement() {
               {selectedTable.status === "occupied" && (
                 <View style={styles.occupiedActions}>
                   <Button
+                    title="Llamar al camarero"
+                    onPress={() => {
+                      setShowTableModal(false);
+                      handleCallWaiter(selectedTable);
+                    }}
+                    variant="outline"
+                    icon={<Ionicons name="person" size={16} color="#374151" />}
+                    style={styles.actionButton}
+                  />
+                  <Button
                     title="Realizar pedido"
                     onPress={() => {
                       setShowTableModal(false);
@@ -719,9 +825,9 @@ export default function TableManagement() {
           </View>
 
           {validationError && (
-            <Alert style={styles.validationErrorAlert}>
+            <UIAlert style={styles.validationErrorAlert}>
               <AlertDescription>{validationError}</AlertDescription>
-            </Alert>
+            </UIAlert>
           )}
 
           <View style={styles.confirmSection}>
