@@ -79,6 +79,22 @@ export default function TableManagement() {
   useEffect(() => {
     console.log('🔌 Configurando listeners de alertas en TableManagement');
     
+    // Cargar alertas existentes al iniciar
+    const existingAlerts = alertsService.getActiveAlerts();
+    if (existingAlerts.length > 0) {
+      console.log('📋 Cargando alertas activas existentes:', existingAlerts.length);
+      const mappedAlerts = existingAlerts.map(alert => ({
+        id: alert.alertId,
+        tableId: alert.tableNumber,
+        type: alert.alertType,
+        message: alert.message,
+        timestamp: alert.timestamp,
+        priority: alert.priority,
+        resolved: alert.resolved
+      }));
+      setAlerts(mappedAlerts);
+    }
+    
     const handleNewAlert = (alert: any) => {
       console.log('🚨 Nueva alerta recibida en TableManagement:', alert);
       console.log('📊 Estado actual de alertas:', alerts);
@@ -214,10 +230,27 @@ export default function TableManagement() {
     setAlerts(prev => [...prev, newAlert]);
   };
 
-  const resolveAlert = (alertId: string) => {
-    setAlerts(prev => prev.map(alert => 
-      alert.id === alertId ? { ...alert, resolved: true } : alert
-    ));
+  const resolveAlert = async (alertId: string) => {
+    try {
+      console.log(`🔄 Resolviendo alerta: ${alertId}`);
+      await alertsService.resolveAlert(alertId);
+      
+      // Recargar alertas activas después de resolver
+      const updatedAlerts = alertsService.getActiveAlerts();
+      const mappedAlerts = updatedAlerts.map(alert => ({
+        id: alert.alertId,
+        tableId: alert.tableNumber,
+        type: alert.alertType,
+        message: alert.message,
+        timestamp: alert.timestamp,
+        priority: alert.priority,
+        resolved: alert.resolved
+      }));
+      setAlerts(mappedAlerts);
+      console.log(`✅ Alerta ${alertId} resuelta y lista actualizada`);
+    } catch (error) {
+      console.error(`❌ Error resolviendo alerta ${alertId}:`, error);
+    }
   };
 
   const getTimeAgo = (timestamp: Date) => {
@@ -317,38 +350,6 @@ export default function TableManagement() {
     }
   };
 
-  const handleCallWaiter = async (table: Table) => {
-    try {
-      console.log('📞 Llamando al camarero para mesa:', table.number);
-      
-      // Crear alerta a través del servicio WebSocket
-      await alertsService.createAlert({
-        tableId: table.sessionId || `table-${table.number}`,
-        tableNumber: table.number,
-        alertType: 'waiter-call',
-        message: 'El cliente necesita atención del camarero',
-        priority: 'medium'
-      });
-      
-      console.log('✅ Alerta de camarero enviada exitosamente');
-      
-      // Mostrar confirmación al usuario
-      Alert.alert(
-        'Alerta enviada',
-        `Se ha enviado una alerta al camarero para la mesa ${table.number}`,
-        [{ text: 'OK' }]
-      );
-      
-    } catch (error) {
-      console.error('❌ Error al enviar alerta de camarero:', error);
-      Alert.alert(
-        'Error',
-        'No se pudo enviar la alerta. Verifica la conexión.',
-        [{ text: 'OK' }]
-      );
-    }
-  };
-
   const handleConfirmOrder = (items: any[]) => {
     if (selectedTableForMenu) {
       setTableOrders(prev => ({
@@ -380,6 +381,16 @@ export default function TableManagement() {
     setValidationError('');
   };
 
+  const handleRefresh = async () => {
+    try {
+      console.log('🔄 Actualizando datos de mesas...');
+      await refreshTables();
+      console.log('✅ Datos actualizados correctamente');
+    } catch (error) {
+      console.error('❌ Error al actualizar datos:', error);
+    }
+  };
+
   const renderTableCard = ({ item: table }: { item: Table }) => {
     const config = statusConfig[table.status];
     const hasAlert = activeAlerts.some(alert => alert.tableId === table.id);
@@ -404,20 +415,26 @@ export default function TableManagement() {
             </View>
 
             <View style={styles.tableInfo}>
-              {table.timeOccupied && (
+              {table.timeOccupied ? (
                 <Text style={[styles.tableInfoText, { color: config.textColor }]}>
                   Tiempo: {table.timeOccupied}
                 </Text>
-              )}
+              ) : null}
+              
+              {table.orderTotal ? (
+                <Text style={[styles.orderTotal, { color: config.textColor }]}>
+                  €{table.orderTotal}
+                  {table.paidAmount && (
+                    <Text style={styles.paidAmount}> (-€{table.paidAmount})</Text>
+                  )}
+                </Text>
+              ) : null}
             </View>
 
-            {table.orderTotal && (
-              <Text style={[styles.orderTotal, { color: config.textColor }]}>
-                €{table.orderTotal}
-                {table.paidAmount && (
-                  <Text style={styles.paidAmount}> (-€{table.paidAmount})</Text>
-                )}
-              </Text>
+            {hasAlert && (
+              <View style={styles.alertIndicator}>
+                <Ionicons name="warning" size={14} color="#ef4444" />
+              </View>
             )}
           </CardContent>
         </Card>
@@ -596,12 +613,23 @@ export default function TableManagement() {
         </View>
         <View style={styles.headerRight}>
           {user && (
-            <Button
-              title="Cerrar Sesión"
-              onPress={logout}
-              variant="outline"
-              size="sm"
-            />
+            <>
+              <Button
+                title="Actualizar"
+                onPress={handleRefresh}
+                variant="outline"
+                size="sm"
+                style={styles.refreshButton}
+                icon={<Ionicons name="refresh" size={16} color="#10b981" />}
+              />
+              <Button
+                title="Cerrar Sesión"
+                onPress={logout}
+                variant="outline"
+                size="sm"
+                style={styles.logoutButton}
+              />
+            </>
           )}
         </View>
       </View>
@@ -700,15 +728,17 @@ export default function TableManagement() {
                           },
                         ]}
                       >
-                        <Text style={[styles.alertMessage, { color: config.color }]}>
-                          {alert.message}
-                        </Text>
-                        <Button
-                          title="Resolver"
-                          onPress={() => resolveAlert(alert.id)}
-                          variant="ghost"
-                          size="sm"
-                        />
+                        <View style={styles.tableAlertContent}>
+                          <Text style={[styles.alertMessage, { color: config.color }]}>
+                            {alert.message}
+                          </Text>
+                          <Button
+                            title="Resolver"
+                            onPress={() => resolveAlert(alert.id)}
+                            variant="ghost"
+                            size="sm"
+                          />
+                        </View>
                       </View>
                     );
                   })}
@@ -733,16 +763,6 @@ export default function TableManagement() {
 
               {selectedTable.status === "occupied" && (
                 <View style={styles.occupiedActions}>
-                  <Button
-                    title="Llamar al camarero"
-                    onPress={() => {
-                      setShowTableModal(false);
-                      handleCallWaiter(selectedTable);
-                    }}
-                    variant="outline"
-                    icon={<Ionicons name="person" size={16} color="#374151" />}
-                    style={styles.actionButton}
-                  />
                   <Button
                     title="Realizar pedido"
                     onPress={() => {
@@ -1036,6 +1056,8 @@ const styles = StyleSheet.create({
     fontSize: isTablet ? 14 : 12,
     fontWeight: '500',
     marginBottom: 4,
+    flex: 1,
+    marginRight: 8,
   },
   alertTime: {
     fontSize: isTablet ? 12 : 10,
@@ -1056,10 +1078,12 @@ const styles = StyleSheet.create({
   tableCard: {
     flex: 1,
     margin: 4,
+    height: isTablet ? 100 : 80,
   },
   tableCardInner: {
     borderRadius: 12,
     overflow: 'hidden',
+    height: '100%',
   },
   tableCardWithAlert: {
     borderWidth: 2,
@@ -1067,10 +1091,12 @@ const styles = StyleSheet.create({
   },
   tableContent: {
     padding: isTablet ? 16 : 12,
+    height: '100%',
+    justifyContent: 'space-between',
   },
   tableHeader: {
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: 4,
   },
   tableNumber: {
     fontSize: isTablet ? 18 : 16,
@@ -1085,31 +1111,24 @@ const styles = StyleSheet.create({
     fontSize: isTablet ? 10 : 8,
   },
   tableInfo: {
-    marginBottom: 8,
+    marginBottom: 4,
+    flex: 1,
+    justifyContent: 'center',
   },
   tableInfoText: {
     fontSize: isTablet ? 12 : 10,
     marginBottom: 2,
+    textAlign: 'center',
   },
   orderTotal: {
     fontSize: isTablet ? 14 : 12,
     fontWeight: '600',
     marginTop: 4,
+    textAlign: 'center',
   },
   paidAmount: {
     color: '#10b981',
     fontSize: isTablet ? 12 : 10,
-  },
-  alertIndicator: {
-    position: 'absolute',
-    top: 8,
-    right: 8,
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#ffffff',
-    borderRadius: 12,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
   },
   alertCount: {
     fontSize: isTablet ? 10 : 8,
@@ -1140,6 +1159,11 @@ const styles = StyleSheet.create({
     padding: 12,
     borderRadius: 8,
     borderWidth: 1,
+  },
+  tableAlertContent: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
 
   actions: {
@@ -1276,5 +1300,29 @@ const styles = StyleSheet.create({
     color: '#111827',
     textAlign: 'center',
     marginBottom: 8,
+  },
+  refreshButton: {
+    marginRight: 8,
+  },
+  logoutButton: {
+    marginLeft: 8,
+  },
+  alertIndicator: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    backgroundColor: '#ffffff',
+    borderRadius: 10,
+    padding: 3,
+    borderWidth: 1,
+    borderColor: '#ef4444',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 1,
+    },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+    elevation: 3,
   },
 }); 

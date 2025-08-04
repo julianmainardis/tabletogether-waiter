@@ -15,7 +15,7 @@ export interface Table {
   occupiedTime?: Date;
 }
 
-export type AlertType = "order-ready" | "check-request" | "assistance-needed";
+export type AlertType = "order-ready" | "check-request" | "assistance-needed" | "waiter-call";
 
 export interface TableAlert {
   id: string;
