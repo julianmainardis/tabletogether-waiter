@@ -13,6 +13,7 @@ export interface Table {
   hasAlerts?: boolean;
   sessionId?: string | null;
   occupiedTime?: Date;
+  realId?: string; // ID real de la mesa (UUID) para llamadas al API
 }
 
 export type AlertType = "order-ready" | "check-request" | "assistance-needed" | "waiter-call";

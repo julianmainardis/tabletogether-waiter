@@ -25,6 +25,7 @@ import { useWaiterAuth } from '../contexts/WaiterAuthContext';
 import { useTables, TableStatus as RealTableStatus } from '../hooks/useTables';
 import { tableService } from '../services/tableService';
 import { alertsService } from '../services/alertsService';
+import { orderService, TableOrdersResponse } from '../services/orderService';
 
 type ViewType = 'tables' | 'menu' | 'order-summary';
 
@@ -51,12 +52,14 @@ export default function TableManagement() {
   const [isModifyingOrder, setIsModifyingOrder] = useState(false);
   const [tableOrders, setTableOrders] = useState<Record<number, any[]>>({});
   const [tableDiners, setTableDiners] = useState<Record<number, number>>({});
+  const [currentOrderData, setCurrentOrderData] = useState<TableOrdersResponse | null>(null);
+  const [loadingCurrentOrder, setLoadingCurrentOrder] = useState(false);
 
   // Convertir datos reales del backend al formato de la aplicación
   useEffect(() => {
     if (realTables.length > 0) {
       const convertedTables: Table[] = realTables.map((realTable: RealTableStatus) => ({
-        id: realTable.number,
+        id: realTable.number, // Mantener el número para la UI
         number: realTable.number,
         status: realTable.status,
         capacity: realTable.capacity,
@@ -68,7 +71,8 @@ export default function TableManagement() {
         hasPartialPayment: realTable.hasPartialPayment,
         hasAlerts: realTable.hasAlerts,
         sessionId: realTable.sessionId,
-        timeOccupied: realTable.timeOccupied
+        timeOccupied: realTable.timeOccupied,
+        realId: realTable.id // Agregar el ID real para usar en las llamadas al API
       }));
       
       setTables(convertedTables);
@@ -323,6 +327,63 @@ export default function TableManagement() {
     setSelectedTableForMenu(tableId);
     setIsModifyingOrder(true);
     setCurrentView('menu');
+    loadCurrentOrder(tableId);
+  };
+
+  const loadCurrentOrder = async (tableId: number) => {
+    try {
+      setLoadingCurrentOrder(true);
+      console.log('🔄 Cargando pedido actual para mesa:', tableId);
+      
+      // Encontrar la mesa para obtener el realId
+      const table = tables.find(t => t.id === tableId);
+      if (!table || !table.realId) {
+        console.error('❌ No se encontró la mesa o no tiene realId:', tableId);
+        Alert.alert('Error', 'No se pudo identificar la mesa');
+        return;
+      }
+      
+      console.log('🔍 Usando realId para la mesa:', table.realId);
+      const orderData = await orderService.getOrdersByTableId(table.realId);
+      console.log('📦 Pedido actual cargado:', orderData);
+      
+      // El backend devuelve groupedOrders, necesitamos extraer los items de ahí
+      let currentOrderItems: any[] = [];
+      
+      if (orderData && orderData.groupedOrders) {
+        // Extraer todos los productos de todos los grupos de órdenes
+        currentOrderItems = orderData.groupedOrders.flatMap(group => 
+          group.products.flatMap(product => 
+            product.variations.flatMap(variation => 
+              variation.orderDetails.map(detail => ({
+                id: product.product.name, // Usar el nombre como ID temporal
+                name: product.product.name,
+                price: variation.unitPrice,
+                quantity: detail.quantity,
+                description: product.product.name,
+                image_url: product.product.image_url
+              }))
+            )
+          )
+        );
+      }
+      
+      console.log('📋 Items convertidos:', currentOrderItems);
+      setTableOrders(prev => ({
+        ...prev,
+        [tableId]: currentOrderItems
+      }));
+      
+    } catch (error) {
+      console.error('❌ Error cargando pedido actual:', error);
+      Alert.alert('Error', 'No se pudo cargar el pedido actual');
+      setTableOrders(prev => ({
+        ...prev,
+        [tableId]: []
+      }));
+    } finally {
+      setLoadingCurrentOrder(false);
+    }
   };
 
   const handlePaymentRequest = (table: Table) => {
@@ -364,6 +425,11 @@ export default function TableManagement() {
           ? { ...table, orderTotal: Math.round(total * 100) / 100 }
           : table
       ));
+
+      // Recargar el pedido actual después de confirmar
+      if (isModifyingOrder) {
+        loadCurrentOrder(selectedTableForMenu);
+      }
 
       setCurrentView('tables');
       setSelectedTableForMenu(null);
@@ -587,6 +653,7 @@ export default function TableManagement() {
         diners={currentDiners || 2}
         isModifying={isModifyingOrder}
         currentOrder={selectedTableForMenu ? (tableOrders[selectedTableForMenu] || []) : []}
+        loadingCurrentOrder={loadingCurrentOrder}
         onBack={() => {
           setCurrentView('tables');
           setSelectedTableForMenu(null);

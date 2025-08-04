@@ -22,6 +22,7 @@ interface MenuViewProps {
   diners: number;
   isModifying?: boolean;
   currentOrder?: any[];
+  loadingCurrentOrder?: boolean;
   onBack: () => void;
   onConfirmOrder: (items: any[]) => void;
 }
@@ -43,6 +44,7 @@ export const MenuView: React.FC<MenuViewProps> = ({
   diners,
   isModifying = false,
   currentOrder = [],
+  loadingCurrentOrder = false,
   onBack,
   onConfirmOrder,
 }) => {
@@ -264,16 +266,22 @@ export const MenuView: React.FC<MenuViewProps> = ({
       {isModifying && (
         <View style={styles.currentOrderSection}>
           <Text style={styles.currentOrderTitle}>Pedido Actual</Text>
-          {currentOrder.length > 0 ? (
-            currentOrder.map(item => (
-              <View key={item.id} style={styles.currentOrderItem}>
-                <Text style={styles.currentOrderItemText}>
-                  {item.name} x{item.quantity} - €{(item.price * item.quantity).toFixed(2)}
-                </Text>
-              </View>
-            ))
+          {loadingCurrentOrder ? (
+            <View style={styles.currentOrderLoadingContainer}>
+              <Text style={styles.currentOrderLoadingText}>Cargando pedido actual...</Text>
+            </View>
           ) : (
-            <Text style={styles.noOrderText}>No hay pedido actual</Text>
+            currentOrder.length > 0 ? (
+              currentOrder.map(item => (
+                <View key={item.id} style={styles.currentOrderItem}>
+                  <Text style={styles.currentOrderItemText}>
+                    {item.name} x{item.quantity} - €{(item.price * item.quantity).toFixed(2)}
+                  </Text>
+                </View>
+              ))
+            ) : (
+              <Text style={styles.noOrderText}>No hay pedido actual</Text>
+            )
           )}
         </View>
       )}
@@ -630,5 +638,15 @@ const styles = StyleSheet.create({
   menuItemTouchable: {
     width: '100%',
     marginBottom: 16,
+  },
+  currentOrderLoadingContainer: {
+    padding: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  currentOrderLoadingText: {
+    fontSize: 14,
+    color: '#6b7280',
+    fontStyle: 'italic',
   },
 }); 
