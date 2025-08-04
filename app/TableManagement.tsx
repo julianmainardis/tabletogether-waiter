@@ -26,6 +26,7 @@ import { useTables, TableStatus as RealTableStatus } from '../hooks/useTables';
 import { tableService } from '../services/tableService';
 import { alertsService } from '../services/alertsService';
 import { orderService, TableOrdersResponse } from '../services/orderService';
+import { paymentService } from '../services/paymentService';
 
 type ViewType = 'tables' | 'menu' | 'order-summary';
 
@@ -58,23 +59,38 @@ export default function TableManagement() {
   // Convertir datos reales del backend al formato de la aplicación
   useEffect(() => {
     if (realTables.length > 0) {
-      const convertedTables: Table[] = realTables.map((realTable: RealTableStatus) => ({
-        id: realTable.number, // Mantener el número para la UI
-        number: realTable.number,
-        status: realTable.status,
-        capacity: realTable.capacity,
-        occupiedTime: realTable.lastActivity,
-        waiter: realTable.waiter,
-        total: realTable.orderTotal || 0,
-        orderTotal: realTable.orderTotal,
-        paidAmount: realTable.paidAmount || 0,
-        hasPartialPayment: realTable.hasPartialPayment,
-        hasAlerts: realTable.hasAlerts,
-        sessionId: realTable.sessionId,
-        timeOccupied: realTable.timeOccupied,
-        realId: realTable.id // Agregar el ID real para usar en las llamadas al API
-      }));
+      console.log('🔄 Convirtiendo datos del backend:', realTables.length, 'mesas');
       
+      const convertedTables: Table[] = realTables.map((realTable: RealTableStatus) => {
+        const convertedTable = {
+          id: realTable.number, // Mantener el número para la UI
+          number: realTable.number,
+          status: realTable.status,
+          capacity: realTable.capacity,
+          occupiedTime: realTable.lastActivity,
+          waiter: realTable.waiter,
+          total: realTable.orderTotal || 0,
+          orderTotal: realTable.orderTotal || 0, // Asegurar que siempre sea un número
+          paidAmount: realTable.paidAmount || 0, // Asegurar que siempre sea un número
+          hasPartialPayment: realTable.hasPartialPayment,
+          hasAlerts: realTable.hasAlerts,
+          sessionId: realTable.sessionId,
+          timeOccupied: realTable.timeOccupied,
+          realId: realTable.id // Agregar el ID real para usar en las llamadas al API
+        };
+        
+        console.log(`📊 Mesa ${realTable.number}:`, {
+          orderTotal: realTable.orderTotal,
+          paidAmount: realTable.paidAmount,
+          status: realTable.status,
+          convertedOrderTotal: convertedTable.orderTotal,
+          convertedPaidAmount: convertedTable.paidAmount
+        });
+        
+        return convertedTable;
+      });
+      
+      console.log('✅ Mesas convertidas:', convertedTables.length);
       setTables(convertedTables);
     }
   }, [realTables, user]);
@@ -152,6 +168,11 @@ export default function TableManagement() {
     };
   }, []);
 
+  // Monitorear el estado del modal de pago
+  useEffect(() => {
+    console.log('💰 Estado del modal de pago:', showPaymentModal);
+  }, [showPaymentModal]);
+
   // Filtrar mesas según el estado seleccionado
   const filteredTables = tables.filter(table => {
     if (filterStatus === "all") return true;
@@ -202,12 +223,17 @@ export default function TableManagement() {
         return;
       }
 
-      if (isFullPayment || (realTable.orderTotal || 0) - (realTable.paidAmount || 0) <= amount) {
-        // Pago completo - liberar mesa
-        await tableService.updateTableStatus(realTable.id, {
-          status: 'available'
-        });
-      }
+      console.log(`💳 Procesando pago para mesa ${tableId}:`, {
+        amount,
+        isFullPayment,
+        currentPaidAmount: realTable.paidAmount || 0,
+        orderTotal: realTable.orderTotal || 0
+      });
+
+      // Usar el nuevo servicio de pagos
+      const paymentResult = await paymentService.processPayment(realTable.id, amount, isFullPayment);
+      
+      console.log(`✅ Resultado del pago:`, paymentResult);
 
       // Refrescar los datos del backend
       await refreshTables();
@@ -387,8 +413,10 @@ export default function TableManagement() {
   };
 
   const handlePaymentRequest = (table: Table) => {
+    console.log('💰 Abriendo modal de pago para mesa:', table.number);
     setSelectedTable(table);
     setShowPaymentModal(true);
+    console.log('✅ Estado del modal actualizado a true');
   };
 
   const handlePartialPayment = () => {
@@ -462,6 +490,14 @@ export default function TableManagement() {
     const hasAlert = activeAlerts.some(alert => alert.tableId === table.id);
     const order = tableOrders[table.id] || [];
 
+    // Debug: Log de los datos de la mesa
+    console.log(`Mesa ${table.number}:`, {
+      orderTotal: table.orderTotal,
+      paidAmount: table.paidAmount,
+      status: table.status,
+      hasAlert
+    });
+
     return (
       <TouchableOpacity
         key={table.id}
@@ -487,14 +523,15 @@ export default function TableManagement() {
                 </Text>
               ) : null}
               
-              {table.orderTotal ? (
+              {/* Solo mostrar el total si hay una sesión activa */}
+              {table.sessionId && (
                 <Text style={[styles.orderTotal, { color: config.textColor }]}>
-                  €{table.orderTotal}
-                  {table.paidAmount && (
-                    <Text style={styles.paidAmount}> (-€{table.paidAmount})</Text>
+                  €{(table.orderTotal || 0).toFixed(2)}
+                  {table.paidAmount && table.paidAmount > 0 && (
+                    <Text style={styles.paidAmount}> (-€{table.paidAmount.toFixed(2)})</Text>
                   )}
                 </Text>
-              ) : null}
+              )}
             </View>
 
             {hasAlert && (
@@ -938,48 +975,46 @@ export default function TableManagement() {
         title="Procesar Pago"
       >
         <View style={styles.modalContent}>
-          <View style={styles.paymentModalContent}>
-            {selectedTable && (
-              <>
-                <Text style={styles.modalTitle}>Mesa {selectedTable.number}</Text>
+          {selectedTable && (
+            <>
+              <Text style={styles.modalTitle}>Mesa {selectedTable.number}</Text>
+              <Text style={styles.modalSubtitle}>
+                Total: €{selectedTable.orderTotal?.toFixed(2) || '0.00'}
+              </Text>
+              {selectedTable.paidAmount && selectedTable.paidAmount > 0 && (
                 <Text style={styles.modalSubtitle}>
-                  Total: €{selectedTable.orderTotal?.toFixed(2) || '0.00'}
+                  Pagado: €{selectedTable.paidAmount.toFixed(2)}
                 </Text>
-                {selectedTable.paidAmount && selectedTable.paidAmount > 0 && (
-                  <Text style={styles.modalSubtitle}>
-                    Pagado: €{selectedTable.paidAmount.toFixed(2)}
-                  </Text>
-                )}
+              )}
 
-                <View style={styles.paymentOptions}>
-                  <Text style={styles.paymentOptionsTitle}>Opciones de pago:</Text>
-                  
-                  <Button
-                    title="Pago completo"
-                    onPress={handleFullPayment}
-                    style={styles.fullPaymentButton}
+              <View style={styles.paymentOptions}>
+                <Text style={styles.paymentOptionsTitle}>Opciones de pago:</Text>
+                
+                <Button
+                  title="Pago completo"
+                  onPress={handleFullPayment}
+                  style={styles.fullPaymentButton}
+                />
+
+                <View style={styles.partialPaymentSection}>
+                  <Text style={styles.partialPaymentLabel}>Pago parcial:</Text>
+                  <TextInput
+                    style={styles.paymentInput}
+                    placeholder="Monto a pagar"
+                    value={paymentAmount}
+                    onChangeText={setPaymentAmount}
+                    keyboardType="numeric"
                   />
-
-                  <View style={styles.partialPaymentSection}>
-                    <Text style={styles.partialPaymentLabel}>Pago parcial:</Text>
-                    <TextInput
-                      style={styles.paymentInput}
-                      placeholder="Monto a pagar"
-                      value={paymentAmount}
-                      onChangeText={setPaymentAmount}
-                      keyboardType="numeric"
-                    />
-                    <Button
-                      title="Procesar pago parcial"
-                      onPress={handlePartialPayment}
-                      variant="outline"
-                      style={styles.paymentButton}
-                    />
-                  </View>
+                  <Button
+                    title="Procesar pago parcial"
+                    onPress={handlePartialPayment}
+                    variant="outline"
+                    style={styles.paymentButton}
+                  />
                 </View>
-              </>
-            )}
-          </View>
+              </View>
+            </>
+          )}
         </View>
       </Modal>
     </SafeAreaView>
@@ -1391,5 +1426,9 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.2,
     shadowRadius: 2,
     elevation: 3,
+  },
+  inputContainer: {
+    width: '100%',
+    alignItems: 'center',
   },
 }); 
