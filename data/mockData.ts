@@ -8,6 +8,7 @@ export const initialTables: Table[] = Array.from({ length: 50 }, (_, i) => {
 
   return {
     id: i + 1,
+    number: i + 1,
     capacity: [2, 4, 6, 8][Math.floor(Math.random() * 4)],
     status,
     timeOccupied:

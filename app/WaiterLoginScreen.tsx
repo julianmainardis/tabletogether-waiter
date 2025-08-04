@@ -29,7 +29,7 @@ export const WaiterLoginScreen: React.FC<WaiterLoginScreenProps> = ({ onLoginSuc
     <WaiterLogin
       onLogin={handleLogin}
       loading={loading}
-      error={error}
+      error={error || undefined}
     />
   );
 }; 

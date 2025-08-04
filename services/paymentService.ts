@@ -31,7 +31,8 @@ export const paymentService = {
       },
       body: JSON.stringify({
         amount,
-        isFullPayment
+        isFullPayment,
+        closeSession: false // Mantener la mesa ocupada después del pago
       }),
     });
 
