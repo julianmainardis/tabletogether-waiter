@@ -176,14 +176,10 @@ export default function TableManagement() {
 
   // Escuchar eventos de actualización de mesas para animaciones
   useEffect(() => {
-    const handleTablesUpdated = (event: any) => {
-      const { changedTableIds } = event.detail;
-      console.log('🎬 Iniciando animaciones para mesas:', changedTableIds);
-      
-      // Agregar las mesas cambiadas al estado de animación
+    // Función para manejar animaciones de mesas (sin eventos personalizados)
+    const handleTablesUpdated = (changedTableIds: string[]) => {
       setAnimatingTables(prev => new Set([...prev, ...changedTableIds]));
       
-      // Remover las animaciones después de 2 segundos
       setTimeout(() => {
         setAnimatingTables(prev => {
           const newSet = new Set(prev);
@@ -194,10 +190,10 @@ export default function TableManagement() {
     };
 
     // Escuchar el evento personalizado
-    window.addEventListener('tables-updated', handleTablesUpdated);
+    // window.addEventListener('tables-updated', handleTablesUpdated); // Eliminado
 
     return () => {
-      window.removeEventListener('tables-updated', handleTablesUpdated);
+      // window.removeEventListener('tables-updated', handleTablesUpdated); // Eliminado
     };
   }, []);
 
@@ -742,13 +738,13 @@ export default function TableManagement() {
         </View>
         <View style={styles.headerRight}>
           {user && (
-            <Button
-              title="Cerrar Sesión"
-              onPress={logout}
-              variant="outline"
-              size="sm"
-              style={styles.logoutButton}
-            />
+              <Button
+                title="Cerrar Sesión"
+                onPress={logout}
+                variant="outline"
+                size="sm"
+                style={styles.logoutButton}
+              />
           )}
         </View>
       </View>

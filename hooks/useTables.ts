@@ -77,7 +77,7 @@ export const useTables = () => {
     try {
       // Solo mostrar loading en la primera carga
       if (tables.length === 0) {
-        setLoading(true);
+      setLoading(true);
       }
       setError(null);
 
@@ -145,14 +145,9 @@ export const useTables = () => {
         totalTables: data.totalTables
       });
 
-      // Emitir evento si hay cambios
+      // Log de cambios detectados (sin eventos personalizados)
       if (changedTableIds.length > 0) {
         console.log('🔄 Cambios detectados en mesas:', changedTableIds);
-        // Emitir evento personalizado para notificar cambios
-        const event = new CustomEvent('tables-updated', {
-          detail: { changedTableIds }
-        });
-        window.dispatchEvent(event);
       }
 
     } catch (error: any) {
