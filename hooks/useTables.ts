@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { waiterAuthService } from '../services/waiterAuth';
+import { alertsService } from '../services/alertsService';
 import Constants from 'expo-constants';
 
 const API_BASE_URL = Constants.expoConfig?.extra?.apiUrl || 'http://localhost:3000/api';
@@ -38,9 +39,46 @@ export const useTables = () => {
     totalTables: 0
   });
 
+  // Referencias para controlar el polling
+  const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const isPollingRef = useRef(false);
+  const previousTablesRef = useRef<TableStatus[]>([]);
+
+  // Función para detectar cambios en las mesas
+  const detectChanges = (newTables: TableStatus[], oldTables: TableStatus[]) => {
+    if (oldTables.length === 0) return []; // Primera carga, no hay cambios
+    
+    const changedTableIds: string[] = [];
+    
+    newTables.forEach(newTable => {
+      const oldTable = oldTables.find(t => t.id === newTable.id);
+      if (!oldTable) {
+        // Nueva mesa
+        changedTableIds.push(newTable.id);
+        return;
+      }
+      
+      // Verificar cambios en propiedades importantes
+      if (
+        oldTable.status !== newTable.status ||
+        oldTable.orderTotal !== newTable.orderTotal ||
+        oldTable.paidAmount !== newTable.paidAmount ||
+        oldTable.sessionId !== newTable.sessionId ||
+        oldTable.timeOccupied !== newTable.timeOccupied
+      ) {
+        changedTableIds.push(newTable.id);
+      }
+    });
+    
+    return changedTableIds;
+  };
+
   const fetchTables = async () => {
     try {
-      setLoading(true);
+      // Solo mostrar loading en la primera carga
+      if (tables.length === 0) {
+        setLoading(true);
+      }
       setError(null);
 
       const auth = waiterAuthService.getCurrentAuth();
@@ -94,12 +132,28 @@ export const useTables = () => {
         updatedAt: new Date(table.updatedAt)
       }));
 
+      // Detectar cambios antes de actualizar el estado
+      const changedTableIds = detectChanges(tablesWithDates, previousTablesRef.current);
+      
+      // Actualizar la referencia anterior
+      previousTablesRef.current = tablesWithDates;
+
       setTables(tablesWithDates);
       setStats({
         totalAvailable: data.totalAvailable,
         totalOccupied: data.totalOccupied,
         totalTables: data.totalTables
       });
+
+      // Emitir evento si hay cambios
+      if (changedTableIds.length > 0) {
+        console.log('🔄 Cambios detectados en mesas:', changedTableIds);
+        // Emitir evento personalizado para notificar cambios
+        const event = new CustomEvent('tables-updated', {
+          detail: { changedTableIds }
+        });
+        window.dispatchEvent(event);
+      }
 
     } catch (error: any) {
       console.error('❌ Error fetching tables:', error);
@@ -109,11 +163,45 @@ export const useTables = () => {
     }
   };
 
+  // Función para iniciar el polling automático
+  const startPolling = () => {
+    if (isPollingRef.current) return;
+    
+    isPollingRef.current = true;
+    console.log('🔄 Iniciando polling automático cada 5 segundos');
+    
+    pollingIntervalRef.current = setInterval(() => {
+      console.log('⏰ Polling automático - actualizando mesas...');
+      fetchTables();
+    }, 5000); // Actualizar cada 5 segundos
+  };
+
+  // Función para detener el polling
+  const stopPolling = () => {
+    if (pollingIntervalRef.current) {
+      clearInterval(pollingIntervalRef.current);
+      pollingIntervalRef.current = null;
+    }
+    isPollingRef.current = false;
+    console.log('⏹️ Polling automático detenido');
+  };
+
+  // Efecto para manejar la actualización automática
   useEffect(() => {
+    // Carga inicial
     fetchTables();
+    
+    // Iniciar polling automático
+    startPolling();
+
+    // Cleanup al desmontar
+    return () => {
+      stopPolling();
+    };
   }, []);
 
   const refreshTables = () => {
+    console.log('🔄 Actualización manual solicitada');
     fetchTables();
   };
 

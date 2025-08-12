@@ -55,6 +55,7 @@ export default function TableManagement() {
   const [tableDiners, setTableDiners] = useState<Record<number, number>>({});
   const [currentOrderData, setCurrentOrderData] = useState<TableOrdersResponse | null>(null);
   const [loadingCurrentOrder, setLoadingCurrentOrder] = useState(false);
+  const [animatingTables, setAnimatingTables] = useState<Set<string>>(new Set());
 
   // Convertir datos reales del backend al formato de la aplicación
   useEffect(() => {
@@ -172,6 +173,33 @@ export default function TableManagement() {
   useEffect(() => {
     console.log('💰 Estado del modal de pago:', showPaymentModal);
   }, [showPaymentModal]);
+
+  // Escuchar eventos de actualización de mesas para animaciones
+  useEffect(() => {
+    const handleTablesUpdated = (event: any) => {
+      const { changedTableIds } = event.detail;
+      console.log('🎬 Iniciando animaciones para mesas:', changedTableIds);
+      
+      // Agregar las mesas cambiadas al estado de animación
+      setAnimatingTables(prev => new Set([...prev, ...changedTableIds]));
+      
+      // Remover las animaciones después de 2 segundos
+      setTimeout(() => {
+        setAnimatingTables(prev => {
+          const newSet = new Set(prev);
+          changedTableIds.forEach((id: string) => newSet.delete(id));
+          return newSet;
+        });
+      }, 2000);
+    };
+
+    // Escuchar el evento personalizado
+    window.addEventListener('tables-updated', handleTablesUpdated);
+
+    return () => {
+      window.removeEventListener('tables-updated', handleTablesUpdated);
+    };
+  }, []);
 
   // Filtrar mesas según el estado seleccionado
   const filteredTables = tables.filter(table => {
@@ -475,27 +503,23 @@ export default function TableManagement() {
     setValidationError('');
   };
 
-  const handleRefresh = async () => {
-    try {
-      console.log('🔄 Actualizando datos de mesas...');
-      await refreshTables();
-      console.log('✅ Datos actualizados correctamente');
-    } catch (error) {
-      console.error('❌ Error al actualizar datos:', error);
-    }
+  const formatCurrency = (amount: number): string => {
+    return Number(amount).toFixed(2);
   };
 
   const renderTableCard = ({ item: table }: { item: Table }) => {
     const config = statusConfig[table.status];
     const hasAlert = activeAlerts.some(alert => alert.tableId === table.id);
     const order = tableOrders[table.id] || [];
+    const isAnimating = animatingTables.has(table.id.toString());
 
     // Debug: Log de los datos de la mesa
     console.log(`Mesa ${table.number}:`, {
       orderTotal: table.orderTotal,
       paidAmount: table.paidAmount,
       status: table.status,
-      hasAlert
+      hasAlert,
+      isAnimating
     });
 
     return (
@@ -507,7 +531,8 @@ export default function TableManagement() {
         <Card style={StyleSheet.flatten([
           styles.tableCardInner,
           { backgroundColor: config.color },
-          hasAlert && styles.tableCardWithAlert
+          hasAlert && styles.tableCardWithAlert,
+          isAnimating && styles.tableCardAnimating
         ])}>
           <CardContent style={styles.tableContent}>
             <View style={styles.tableHeader}>
@@ -526,9 +551,9 @@ export default function TableManagement() {
               {/* Solo mostrar el total si hay una sesión activa */}
               {table.sessionId && (
                 <Text style={[styles.orderTotal, { color: config.textColor }]}>
-                  €{(table.orderTotal || 0).toFixed(2)}
+                  €{formatCurrency(table.orderTotal || 0)}
                   {table.paidAmount && table.paidAmount > 0 && (
-                    <Text style={styles.paidAmount}> (-€{table.paidAmount.toFixed(2)})</Text>
+                    <Text style={styles.paidAmount}> (-€{formatCurrency(table.paidAmount)})</Text>
                   )}
                 </Text>
               )}
@@ -717,23 +742,13 @@ export default function TableManagement() {
         </View>
         <View style={styles.headerRight}>
           {user && (
-            <>
-              <Button
-                title="Actualizar"
-                onPress={handleRefresh}
-                variant="outline"
-                size="sm"
-                style={styles.refreshButton}
-                icon={<Ionicons name="refresh" size={16} color="#10b981" />}
-              />
-              <Button
-                title="Cerrar Sesión"
-                onPress={logout}
-                variant="outline"
-                size="sm"
-                style={styles.logoutButton}
-              />
-            </>
+            <Button
+              title="Cerrar Sesión"
+              onPress={logout}
+              variant="outline"
+              size="sm"
+              style={styles.logoutButton}
+            />
           )}
         </View>
       </View>
@@ -1191,6 +1206,20 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: '#ef4444',
   },
+  tableCardAnimating: {
+    opacity: 0.8,
+    transform: [{ scale: 0.98 }],
+    shadowColor: '#3b82f6',
+    shadowOffset: {
+      width: 0,
+      height: 0,
+    },
+    shadowOpacity: 0.8,
+    shadowRadius: 8,
+    elevation: 8,
+    borderWidth: 2,
+    borderColor: '#3b82f6',
+  },
   tableContent: {
     padding: isTablet ? 16 : 12,
     height: '100%',
@@ -1402,9 +1431,6 @@ const styles = StyleSheet.create({
     color: '#111827',
     textAlign: 'center',
     marginBottom: 8,
-  },
-  refreshButton: {
-    marginRight: 8,
   },
   logoutButton: {
     marginLeft: 8,
