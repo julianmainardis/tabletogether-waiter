@@ -43,6 +43,7 @@ export const useTables = () => {
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const isPollingRef = useRef(false);
   const previousTablesRef = useRef<TableStatus[]>([]);
+  const isFirstLoadRef = useRef(true); // Nueva referencia para controlar la primera carga
 
   // Función para detectar cambios en las mesas
   const detectChanges = (newTables: TableStatus[], oldTables: TableStatus[]) => {
@@ -76,8 +77,17 @@ export const useTables = () => {
   const fetchTables = async () => {
     try {
       // Solo mostrar loading en la primera carga
-      if (tables.length === 0) {
-      setLoading(true);
+      if (isFirstLoadRef.current) {
+        setLoading(true);
+        
+        // Timeout de seguridad para evitar loading infinito
+        setTimeout(() => {
+          if (isFirstLoadRef.current) {
+            console.warn('⚠️ Timeout de seguridad: forzando fin del loading');
+            setLoading(false);
+            isFirstLoadRef.current = false;
+          }
+        }, 10000); // 10 segundos de timeout
       }
       setError(null);
 
@@ -150,9 +160,14 @@ export const useTables = () => {
         console.log('🔄 Cambios detectados en mesas:', changedTableIds);
       }
 
+      // Marcar que ya no es la primera carga
+      isFirstLoadRef.current = false;
+
     } catch (error: any) {
       console.error('❌ Error fetching tables:', error);
       setError(error.message || 'Error al obtener las mesas');
+      // En caso de error, también marcar que ya no es la primera carga
+      isFirstLoadRef.current = false;
     } finally {
       setLoading(false);
     }
