@@ -80,7 +80,7 @@ class AlertsService {
       
       this.socket = io(WS_BASE_URL, {
         path: '/socket.io',
-        transports: ['websocket', 'polling'],
+        transports: ['websocket'],
         timeout: 20000,
         reconnection: true,
         reconnectionAttempts: this.maxReconnectAttempts,
