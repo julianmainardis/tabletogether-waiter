@@ -182,7 +182,7 @@ export const useTables = () => {
     
     pollingIntervalRef.current = setInterval(() => {
       console.log('⏰ Polling automático - actualizando mesas...');
-      fetchTables();
+      //fetchTables();
     }, 5000); // Actualizar cada 5 segundos
   };
 
@@ -202,7 +202,7 @@ export const useTables = () => {
     fetchTables();
     
     // Iniciar polling automático
-    startPolling();
+    //startPolling();
 
     // Cleanup al desmontar
     return () => {

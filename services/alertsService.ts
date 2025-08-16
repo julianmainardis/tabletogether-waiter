@@ -137,6 +137,15 @@ class AlertsService {
       this.handleAlertResolved(data.alertId);
     });
 
+    this.socket.on('order:mark-delivered-response', (data) => {
+      console.log('📦 Respuesta de pedido entregado:', data);
+      if (data.success) {
+        console.log('✅ Pedido marcado como entregado exitosamente');
+      } else {
+        console.error('❌ Error marcando pedido como entregado:', data.error);
+      }
+    });
+
     this.socket.on('connect_error', (error) => {
       console.error('❌ Error de conexión WebSocket:', error);
       this.isConnected = false;
