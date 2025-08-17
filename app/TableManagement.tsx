@@ -43,6 +43,7 @@ export default function TableManagement() {
   const [showAssignModal, setShowAssignModal] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [paymentAmount, setPaymentAmount] = useState('');
+  const [showPartialPayment, setShowPartialPayment] = useState(false);
   const [selectedDiners, setSelectedDiners] = useState(2);
   const [manualDiners, setManualDiners] = useState('');
   const [validationError, setValidationError] = useState('');
@@ -215,6 +216,7 @@ export default function TableManagement() {
 
     setShowPaymentModal(false);
     setPaymentAmount('');
+    setShowPartialPayment(false);
   };
 
   const addAlert = (tableId: number, type: AlertType, message: string) => {
@@ -328,6 +330,8 @@ export default function TableManagement() {
   const handlePaymentRequest = (table: Table) => {
     setSelectedTable(table);
     setShowPaymentModal(true);
+    setShowPartialPayment(false);
+    setPaymentAmount('');
   };
 
   const handlePartialPayment = () => {
@@ -871,48 +875,48 @@ export default function TableManagement() {
         title="Procesar Pago"
       >
         <View style={styles.modalContent}>
-          <View style={styles.paymentModalContent}>
-            {selectedTable && (
-              <>
-                <Text style={styles.modalTitle}>Mesa {selectedTable.number}</Text>
-                <Text style={styles.modalSubtitle}>
-                  Total: €{selectedTable.orderTotal?.toFixed(2) || '0.00'}
-                </Text>
-                {selectedTable.paidAmount && selectedTable.paidAmount > 0 && (
-                  <Text style={styles.modalSubtitle}>
-                    Pagado: €{selectedTable.paidAmount.toFixed(2)}
-                  </Text>
-                )}
+          {selectedTable && (
+            <>
+              <Text style={styles.modalTitle}>Mesa {selectedTable.number}</Text>
+              <Text style={styles.modalSubtitle}>
+                Total a pagar: €{selectedTable.orderTotal?.toFixed(2) || '0.00'}
+              </Text>
 
-                <View style={styles.paymentOptions}>
-                  <Text style={styles.paymentOptionsTitle}>Opciones de pago:</Text>
-                  
-                  <Button
-                    title="Pago completo"
-                    onPress={handleFullPayment}
-                    style={styles.fullPaymentButton}
+              <View style={styles.paymentButtonsRow}>
+                <Button
+                  title="Pago Completo"
+                  onPress={handleFullPayment}
+                  style={styles.fullPaymentButton}
+                  icon={<Ionicons name="card" size={20} color="#ffffff" />}
+                />
+
+                <Button
+                  title="Pago Parcial"
+                  onPress={() => setShowPartialPayment(true)}
+                  variant="outline"
+                  style={styles.partialPaymentButton}
+                  icon={<Ionicons name="calculator" size={20} color="#3b82f6" />}
+                />
+              </View>
+
+              {showPartialPayment && (
+                <View style={styles.partialPaymentSection}>
+                  <TextInput
+                    style={styles.paymentInput}
+                    placeholder="Ingresa el monto"
+                    value={paymentAmount}
+                    onChangeText={setPaymentAmount}
+                    keyboardType="numeric"
                   />
-
-                  <View style={styles.partialPaymentSection}>
-                    <Text style={styles.partialPaymentLabel}>Pago parcial:</Text>
-                    <TextInput
-                      style={styles.paymentInput}
-                      placeholder="Monto a pagar"
-                      value={paymentAmount}
-                      onChangeText={setPaymentAmount}
-                      keyboardType="numeric"
-                    />
-                    <Button
-                      title="Procesar pago parcial"
-                      onPress={handlePartialPayment}
-                      variant="outline"
-                      style={styles.paymentButton}
-                    />
-                  </View>
+                  <Button
+                    title="Pagar"
+                    onPress={handlePartialPayment}
+                    style={styles.payButton}
+                  />
                 </View>
-              </>
-            )}
-          </View>
+              )}
+            </>
+          )}
         </View>
       </Modal>
     </SafeAreaView>
@@ -981,6 +985,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: isTablet ? 0 : 1,
     borderColor: '#e5e7eb',
     padding: isTablet ? 16 : 12,
+    height: isTablet ? '100%' : undefined,
   },
   rightPanel: {
     flex: 1,
@@ -1016,6 +1021,7 @@ const styles = StyleSheet.create({
   },
   alertsSection: {
     marginTop: 16,
+    flex: 1,
   },
   alertsHeader: {
     flexDirection: 'row',
@@ -1032,7 +1038,7 @@ const styles = StyleSheet.create({
     padding: 4,
   },
   alertsList: {
-    maxHeight: isTablet ? 300 : 200,
+    flex: 1,
   },
   noAlertsText: {
     textAlign: 'center',
@@ -1137,7 +1143,9 @@ const styles = StyleSheet.create({
     marginLeft: 2,
   },
   modalContent: {
-    gap: 16,
+    gap: 20,
+    paddingHorizontal: 16,
+    minWidth: isTablet ? 400 : 320,
   },
   infoText: {
     fontSize: isTablet ? 16 : 14,
@@ -1185,7 +1193,7 @@ const styles = StyleSheet.create({
     fontSize: isTablet ? 16 : 14,
     color: '#374151',
     marginBottom: 16,
-    textAlign: 'center',
+    textAlign: 'left',
   },
   manualInputSection: {
     alignItems: 'center',
@@ -1254,6 +1262,13 @@ const styles = StyleSheet.create({
   paymentLabel: {
     fontWeight: '600',
   },
+  paymentButtonsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 12,
+    marginTop: 16,
+    width: '100%',
+  },
   paymentOptions: {
     gap: 12,
   },
@@ -1269,36 +1284,53 @@ const styles = StyleSheet.create({
   fullPaymentButton: {
     paddingVertical: 12,
     minHeight: 48,
-    width: '70%',
-    alignSelf: 'center',
+    flex: 1,
+    backgroundColor: '#3b82f6',
+  },
+  partialPaymentButton: {
+    paddingVertical: 12,
+    minHeight: 48,
+    flex: 1,
+    borderColor: '#3b82f6',
+    borderWidth: 2,
+  },
+  payButton: {
+    paddingVertical: 12,
+    minHeight: 48,
+    width: '100%',
+    backgroundColor: '#3b82f6',
   },
   partialPaymentSection: {
     gap: 8,
-    alignItems: 'center',
+    alignItems: 'flex-start',
+    marginTop: 16,
   },
   partialPaymentLabel: {
     fontSize: isTablet ? 16 : 14,
     fontWeight: '600',
     color: '#374151',
     marginBottom: 4,
+    textAlign: 'left',
+    alignSelf: 'flex-start',
   },
   paymentInput: {
     fontSize: isTablet ? 16 : 14,
     color: '#111827',
     paddingVertical: 12,
-    paddingHorizontal: 12,
+    paddingHorizontal: 16,
     borderWidth: 1,
     borderColor: '#d1d5db',
     borderRadius: 8,
     backgroundColor: '#ffffff',
-    width: '60%',
-    textAlign: 'center',
+    width: '100%',
+    textAlign: 'left',
+    minHeight: 48,
   },
   modalTitle: {
     fontSize: isTablet ? 20 : 18,
     fontWeight: 'bold',
     color: '#111827',
-    textAlign: 'center',
+    textAlign: 'left',
     marginBottom: 8,
   },
   refreshButton: {

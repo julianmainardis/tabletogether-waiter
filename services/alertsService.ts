@@ -26,7 +26,6 @@ class AlertsService {
   private alerts: TableAlert[] = [];
 
   constructor() {
-    this.initializeSocket();
     this.loadAlertsFromStorage();
   }
 
@@ -77,6 +76,14 @@ class AlertsService {
   private initializeSocket() {
     try {
       console.log('🔌 Inicializando conexión WebSocket...');
+      console.log('🌐 URL del WebSocket:', WS_BASE_URL);
+      
+      // Verificar que tenemos datos de autenticación
+      const auth = waiterAuthService.getCurrentAuth();
+      if (!auth) {
+        console.warn('⚠️ No hay datos de autenticación disponibles');
+        return;
+      }
       
       this.socket = io(WS_BASE_URL, {
         path: '/socket.io',
@@ -85,6 +92,10 @@ class AlertsService {
         reconnection: true,
         reconnectionAttempts: this.maxReconnectAttempts,
         reconnectionDelay: this.reconnectDelay,
+        auth: {
+          token: auth.token,
+          type: 'waiter'
+        }
       });
 
       this.setupEventListeners();
@@ -317,12 +328,25 @@ class AlertsService {
       console.log(`👨‍💼 Uniéndose a la sala de camareros como ${waiterId}`);
       this.socket.emit('join-waiter-room', { waiterId });
     } else {
-      console.warn('⚠️ Socket no conectado, no se puede unir a la sala');
+      console.warn('⚠️ Socket no conectado, intentando reconectar...');
       console.log('🔍 Estado del socket:', {
         socketExists: !!this.socket,
         isConnected: this.isConnected,
         socketConnected: this.socket?.connected
       });
+      
+      // Intentar reconectar si no está conectado
+      this.initializeSocketConnection();
+      
+      // Esperar un poco y volver a intentar unirse a la sala
+      setTimeout(() => {
+        if (this.socket && this.isConnected) {
+          console.log(`👨‍💼 Reintentando unirse a la sala de camareros como ${waiterId}`);
+          this.socket.emit('join-waiter-room', { waiterId });
+        } else {
+          console.error('❌ No se pudo conectar el socket después del reintento');
+        }
+      }, 2000);
     }
   }
 
@@ -417,6 +441,39 @@ class AlertsService {
     return this.isConnected;
   }
 
+  public getConnectionStatus(): {
+    isConnected: boolean;
+    socketExists: boolean;
+    socketConnected: boolean;
+    hasAuth: boolean;
+    url: string;
+  } {
+    const auth = waiterAuthService.getCurrentAuth();
+    return {
+      isConnected: this.isConnected,
+      socketExists: !!this.socket,
+      socketConnected: this.socket?.connected || false,
+      hasAuth: !!auth,
+      url: WS_BASE_URL
+    };
+  }
+
+  public initializeSocketConnection(): void {
+    // Verificar que tenemos autenticación antes de conectar
+    const auth = waiterAuthService.getCurrentAuth();
+    if (!auth) {
+      console.warn('⚠️ No hay autenticación disponible para conectar el socket');
+      return;
+    }
+    
+    if (!this.socket || !this.isConnected) {
+      console.log('🔌 Inicializando conexión WebSocket...');
+      this.initializeSocket();
+    } else {
+      console.log('🔌 Socket ya está conectado');
+    }
+  }
+
   public disconnect() {
     if (this.socket) {
       console.log('🔌 Desconectando del servidor de alertas');
@@ -430,7 +487,7 @@ class AlertsService {
     console.log('🔄 Intentando reconectar...');
     this.disconnect();
     setTimeout(() => {
-      this.initializeSocket();
+      this.initializeSocketConnection();
     }, 1000);
   }
 }
