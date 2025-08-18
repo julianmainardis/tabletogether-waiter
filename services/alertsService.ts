@@ -10,11 +10,27 @@ export interface TableAlert {
   alertId: string;
   tableId: string;
   tableNumber: number;
-  alertType: 'waiter-call' | 'order-ready' | 'check-request' | 'assistance-needed';
+  alertType: 'waiter-call' | 'order-ready' | 'check-request' | 'assistance-needed' | 'new-order' | 'table-occupied';
   message: string;
   priority: 'low' | 'medium' | 'high';
   timestamp: Date;
   resolved: boolean;
+  orderId?: string;
+  total?: string;
+  userName?: string;
+}
+
+export interface TableOrderUpdate {
+  tableNumber: number;
+  orderId: string;
+  total: number;
+  message: string;
+}
+
+export interface TableStatusUpdate {
+  tableNumber: number;
+  userName: string;
+  message: string;
 }
 
 class AlertsService {
@@ -129,6 +145,9 @@ class AlertsService {
 
     this.socket.on('new-alert', (alert: TableAlert) => {
       console.log('🚨 Nueva alerta recibida:', alert);
+      console.log('📋 Tipo de alerta:', alert.alertType);
+      console.log('📋 Mesa:', alert.tableNumber);
+      console.log('📋 Mensaje:', alert.message);
       this.handleNewAlert(alert);
     });
 
@@ -168,7 +187,50 @@ class AlertsService {
     // Por ahora, solo logueamos la alerta
     console.log(`🚨 ALERTA: Mesa ${alert.tableNumber} - ${alert.message}`);
     
-    // Agregar la alerta a la lista local
+    // Manejo específico para diferentes tipos de alerta
+    switch (alert.alertType) {
+      case 'new-order':
+        console.log(`🍽️ NUEVO PEDIDO: Mesa ${alert.tableNumber} - Pedido #${alert.orderId} - Total: $${alert.total}`);
+        console.log(`📋 Detalles del pedido: ${alert.message}`);
+        
+        // Para alertas de nuevo pedido, NO las guardamos como alertas persistentes
+        // Solo emitimos el evento para actualizar la información de la mesa
+        this.emitCustomEvent('new-table-alert', alert);
+        this.emitCustomEvent('table-order-updated', {
+          tableNumber: alert.tableNumber,
+          orderId: alert.orderId,
+          total: alert.total,
+          message: alert.message
+        });
+        return; // Salir sin guardar la alerta
+        
+      case 'table-occupied':
+        console.log(`🪑 MESA OCUPADA: Mesa ${alert.tableNumber} - Usuario: ${alert.userName}`);
+        console.log(`📋 Detalles: ${alert.message}`);
+        console.log(`📋 Emitiendo evento 'table-status-updated'`);
+        
+        // Para alertas de mesa ocupada, NO las guardamos como alertas persistentes
+        // Solo emitimos el evento para actualizar la información de la mesa
+        this.emitCustomEvent('new-table-alert', alert);
+        this.emitCustomEvent('table-status-updated', {
+          tableNumber: alert.tableNumber,
+          userName: alert.userName,
+          message: alert.message
+        });
+        console.log(`✅ Evento 'table-status-updated' emitido para mesa ${alert.tableNumber}`);
+        return; // Salir sin guardar la alerta
+        
+      case 'order-ready':
+        console.log(`✅ PEDIDO LISTO: Mesa ${alert.tableNumber} - Pedido #${alert.orderId}`);
+        break;
+      case 'waiter-call':
+        console.log(`📞 LLAMADA AL MESERO: Mesa ${alert.tableNumber} - ${alert.message}`);
+        break;
+      default:
+        console.log(`🚨 ALERTA GENERAL: Mesa ${alert.tableNumber} - ${alert.message}`);
+    }
+    
+    // Agregar la alerta a la lista local (solo para alertas que requieren atención)
     this.alerts.push(alert);
     this.saveAlertsToStorage();
     
@@ -338,9 +400,11 @@ class AlertsService {
   public createAlert(alertData: {
     tableId: string;
     tableNumber: number;
-    alertType: 'waiter-call' | 'order-ready' | 'check-request' | 'assistance-needed';
+    alertType: 'waiter-call' | 'order-ready' | 'check-request' | 'assistance-needed' | 'new-order';
     message: string;
     priority: 'low' | 'medium' | 'high';
+    orderId?: string;
+    total?: number;
   }): Promise<{ success: boolean; alertId: string }> {
     return new Promise((resolve, reject) => {
       if (!this.socket || !this.isConnected) {

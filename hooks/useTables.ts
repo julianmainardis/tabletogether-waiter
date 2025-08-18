@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { waiterAuthService } from '../services/waiterAuth';
 import { alertsService } from '../services/alertsService';
 import Constants from 'expo-constants';
+import { AppState, AppStateStatus } from 'react-native';
 
 const API_BASE_URL = Constants.expoConfig?.extra?.apiUrl || 'http://localhost:3000/api';
 
@@ -43,7 +44,8 @@ export const useTables = () => {
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const isPollingRef = useRef(false);
   const previousTablesRef = useRef<TableStatus[]>([]);
-  const isFirstLoadRef = useRef(true); // Nueva referencia para controlar la primera carga
+  const isFirstLoadRef = useRef(true);
+  const appStateRef = useRef(AppState.currentState);
 
   // Función para detectar cambios en las mesas
   const detectChanges = (newTables: TableStatus[], oldTables: TableStatus[]) => {
@@ -155,7 +157,7 @@ export const useTables = () => {
         totalTables: data.totalTables
       });
 
-      // Log de cambios detectados (sin eventos personalizados)
+      // Log de cambios detectados
       if (changedTableIds.length > 0) {
         console.log('🔄 Cambios detectados en mesas:', changedTableIds);
       }
@@ -173,17 +175,22 @@ export const useTables = () => {
     }
   };
 
-  // Función para iniciar el polling automático
+  // Función para iniciar el polling inteligente
   const startPolling = () => {
     if (isPollingRef.current) return;
     
     isPollingRef.current = true;
-    console.log('🔄 Iniciando polling automático cada 5 segundos');
+    console.log('🔄 Iniciando polling inteligente cada 30 segundos');
     
     pollingIntervalRef.current = setInterval(() => {
-      console.log('⏰ Polling automático - actualizando mesas...');
-      //fetchTables();
-    }, 5000); // Actualizar cada 5 segundos
+      // Solo hacer polling si la app está activa
+      if (appStateRef.current === 'active') {
+        console.log('⏰ Polling inteligente - verificando cambios...');
+        fetchTables();
+      } else {
+        console.log('⏸️ App en background, saltando polling');
+      }
+    }, 30000); // Actualizar cada 30 segundos
   };
 
   // Función para detener el polling
@@ -193,7 +200,20 @@ export const useTables = () => {
       pollingIntervalRef.current = null;
     }
     isPollingRef.current = false;
-    console.log('⏹️ Polling automático detenido');
+    console.log('⏹️ Polling inteligente detenido');
+  };
+
+  // Manejar cambios en el estado de la app
+  const handleAppStateChange = (nextAppState: AppStateStatus) => {
+    console.log('📱 Estado de la app cambiado:', appStateRef.current, '→', nextAppState);
+    
+    if (appStateRef.current.match(/inactive|background/) && nextAppState === 'active') {
+      // App vuelve a estar activa, hacer una actualización inmediata
+      console.log('🔄 App activa, actualizando datos...');
+      fetchTables();
+    }
+    
+    appStateRef.current = nextAppState;
   };
 
   // Efecto para manejar la actualización automática
@@ -201,12 +221,22 @@ export const useTables = () => {
     // Carga inicial
     fetchTables();
     
-    // Iniciar polling automático
-    //startPolling();
+    // 🚀 SISTEMA DE EVENTOS EN TIEMPO REAL
+    // Polling desactivado - solo eventos en tiempo real
+    // Los siguientes eventos actualizan automáticamente:
+    // - 'new-order': Nuevos pedidos confirmados
+    // - 'table-occupied': Mesas que pasan a estar ocupadas
+    // - 'order-ready': Pedidos listos para servir
+    // - 'waiter-call': Llamadas al mesero
+    // startPolling();
+
+    // Escuchar cambios en el estado de la app
+    const subscription = AppState.addEventListener('change', handleAppStateChange);
 
     // Cleanup al desmontar
     return () => {
       stopPolling();
+      subscription?.remove();
     };
   }, []);
 

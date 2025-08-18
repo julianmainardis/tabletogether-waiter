@@ -19,7 +19,7 @@ import { Badge } from '../components/ui/badge';
 import { Alert as UIAlert, AlertDescription } from '../components/ui/alert';
 import Modal from '../components/ui/Modal';
 import { MenuView } from '../components/MenuView';
-import { Table, TableStatus, TableAlert, AlertType } from '../types/table';
+import { Table, TableStatus, TableAlert, AlertType, TableOrderUpdate, TableStatusUpdate } from '../types/table';
 import { statusConfig, alertConfig } from '../data/mockData';
 import { useWaiterAuth } from '../contexts/WaiterAuthContext';
 import { useTables, TableStatus as RealTableStatus } from '../hooks/useTables';
@@ -100,19 +100,21 @@ export default function TableManagement() {
   useEffect(() => {
     console.log('🔌 Configurando listeners de alertas en TableManagement');
     
-    // Cargar alertas existentes al iniciar
+    // Cargar alertas existentes al iniciar (excluyendo 'new-order')
     const existingAlerts = alertsService.getActiveAlerts();
     if (existingAlerts.length > 0) {
       console.log('📋 Cargando alertas activas existentes:', existingAlerts.length);
-      const mappedAlerts = existingAlerts.map(alert => ({
-        id: alert.alertId,
-        tableId: alert.tableNumber,
-        type: alert.alertType,
-        message: alert.message,
-        timestamp: alert.timestamp,
-        priority: alert.priority,
-        resolved: alert.resolved
-      }));
+      const mappedAlerts = existingAlerts
+        .filter(alert => alert.alertType !== 'new-order' && alert.alertType !== 'table-occupied') // Excluir alertas de actualización
+        .map(alert => ({
+          id: alert.alertId,
+          tableId: alert.tableNumber,
+          type: alert.alertType as AlertType, // Cast para excluir 'new-order'
+          message: alert.message,
+          timestamp: alert.timestamp,
+          priority: alert.priority,
+          resolved: alert.resolved
+        }));
       setAlerts(mappedAlerts);
     }
     
@@ -120,23 +122,46 @@ export default function TableManagement() {
       console.log('🚨 Nueva alerta recibida en TableManagement:', alert);
       console.log('📊 Estado actual de alertas:', alerts);
       
-      // Agregar la alerta a la lista local
-      const newAlert = {
-        id: alert.alertId,
-        tableId: alert.tableNumber,
-        type: alert.alertType,
-        message: alert.message,
-        timestamp: new Date(alert.timestamp),
-        priority: alert.priority,
-        resolved: alert.resolved
-      };
+      // Manejo especial para alertas de nuevo pedido
+      if (alert.alertType === 'new-order') {
+        console.log('🍽️ Nuevo pedido detectado para mesa:', alert.tableNumber);
+        console.log('📋 Detalles del pedido:', {
+          orderId: alert.orderId,
+          total: alert.total,
+          message: alert.message
+        });
+        
+        // Actualizar automáticamente la información de la mesa
+        handleTableOrderUpdate({
+          tableNumber: alert.tableNumber,
+          orderId: alert.orderId,
+          total: alert.total,
+          message: alert.message
+        });
+        
+        // NO agregar como alerta que requiera atención
+        return;
+      }
       
-      console.log('➕ Agregando nueva alerta:', newAlert);
-      setAlerts(prev => {
-        const updated = [...prev, newAlert];
-        console.log('📋 Lista actualizada de alertas:', updated);
-        return updated;
-      });
+      // Para otros tipos de alerta, agregar normalmente (excluyendo 'new-order' y 'table-occupied')
+      if (alert.alertType !== 'new-order' && alert.alertType !== 'table-occupied') {
+        const newAlert = {
+          id: alert.alertId,
+          tableId: alert.tableNumber,
+          type: alert.alertType as AlertType, // Cast para excluir 'new-order'
+          message: alert.message,
+          timestamp: new Date(alert.timestamp),
+          priority: alert.priority,
+          resolved: alert.resolved
+        };
+        
+        console.log('➕ Agregando nueva alerta:', newAlert);
+        setAlerts(prev => {
+          const updated = [...prev, newAlert];
+          console.log('📋 Lista actualizada de alertas:', updated);
+          return updated;
+        });
+      }
     };
 
     const handleAlertResolved = (data: any) => {
@@ -160,12 +185,16 @@ export default function TableManagement() {
     // Agregar event listeners usando el servicio de alertas
     alertsService.addEventListener('new-table-alert', handleNewAlert);
     alertsService.addEventListener('alert-resolved', handleAlertResolved);
+    alertsService.addEventListener('table-order-updated', handleTableOrderUpdate);
+    alertsService.addEventListener('table-status-updated', handleTableStatusUpdate);
 
     // Cleanup
     return () => {
       console.log('🧹 Limpiando listeners de alertas');
       alertsService.removeEventListener('new-table-alert', handleNewAlert);
       alertsService.removeEventListener('alert-resolved', handleAlertResolved);
+      alertsService.removeEventListener('table-order-updated', handleTableOrderUpdate);
+      alertsService.removeEventListener('table-status-updated', handleTableStatusUpdate);
     };
   }, []);
 
@@ -284,6 +313,112 @@ export default function TableManagement() {
     setAlerts(prev => [...prev, newAlert]);
   };
 
+  // Función para manejar actualizaciones de pedidos de mesa
+  const handleTableOrderUpdate = async (data: { tableNumber: number; orderId: string; total: number; message: string }) => {
+    const { tableNumber, orderId, total } = data;
+    console.log(`🔄 Actualizando información de mesa ${tableNumber} con nuevo pedido:`, {
+      orderId,
+      total
+    });
+
+    try {
+      // Actualizar el estado local de las mesas inmediatamente
+      setTables(prev => prev.map(table => {
+        if (table.number === tableNumber) {
+          console.log(`📊 Actualizando mesa ${tableNumber}:`, {
+            orderTotalAntes: table.orderTotal,
+            orderTotalNuevo: total,
+            paidAmount: table.paidAmount
+          });
+          
+          return {
+            ...table,
+            orderTotal: (table.orderTotal || 0) + total,
+            hasPartialPayment: (table.paidAmount || 0) > 0
+          };
+        }
+        return table;
+      }));
+
+      // Animar la mesa para indicar que se actualizó
+      setAnimatingTables(prev => new Set([...prev, tableNumber.toString()]));
+      
+      // Remover la animación después de 2 segundos
+      setTimeout(() => {
+        setAnimatingTables(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(tableNumber.toString());
+          return newSet;
+        });
+      }, 2000);
+
+      // Opcional: Refrescar datos del backend para asegurar sincronización
+      setTimeout(async () => {
+        try {
+          console.log(`🔄 Refrescando datos del backend para mesa ${tableNumber}`);
+          await refreshTables();
+        } catch (error) {
+          console.error('Error refrescando datos del backend:', error);
+        }
+      }, 1000);
+
+    } catch (error) {
+      console.error(`Error actualizando mesa ${tableNumber}:`, error);
+    }
+  };
+
+  // Función para manejar actualizaciones de estado de mesa
+  const handleTableStatusUpdate = async (data: { tableNumber: number; userName: string; message: string }) => {
+    const { tableNumber, userName } = data;
+    console.log(`🔄 Actualizando estado de mesa ${tableNumber} - Ocupada por:`, userName);
+    console.log(`📋 Datos recibidos:`, data);
+
+    try {
+      // Actualizar el estado local de las mesas inmediatamente
+      setTables(prev => prev.map(table => {
+        if (table.number === tableNumber) {
+          console.log(`📊 Actualizando mesa ${tableNumber}:`, {
+            statusAntes: table.status,
+            statusNuevo: 'occupied'
+          });
+          
+          return {
+            ...table,
+            status: 'occupied' as TableStatus,
+            timeOccupied: new Date().toISOString(),
+            waiter: userName // Temporalmente asignar el usuario como waiter
+          };
+        }
+        return table;
+      }));
+
+      // Animar la mesa para indicar que se actualizó
+      setAnimatingTables(prev => new Set([...prev, tableNumber.toString()]));
+      
+      // Remover la animación después de 2 segundos
+      setTimeout(() => {
+        setAnimatingTables(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(tableNumber.toString());
+          return newSet;
+        });
+      }, 2000);
+
+      // Opcional: Refrescar datos del backend para asegurar sincronización
+      setTimeout(async () => {
+        try {
+          console.log(`🔄 Refrescando datos del backend para mesa ${tableNumber}`);
+          await refreshTables();
+        } catch (error) {
+          console.error('Error refrescando datos del backend:', error);
+        }
+      }, 1000);
+
+    } catch (error) {
+      console.error(`Error actualizando mesa ${tableNumber}:`, error);
+    }
+  };
+
   const resolveAlert = async (alertId: string) => {
     try {
       console.log(`🔄 Resolviendo alerta: ${alertId}`);
@@ -291,15 +426,17 @@ export default function TableManagement() {
       
       // Recargar alertas activas después de resolver
       const updatedAlerts = alertsService.getActiveAlerts();
-      const mappedAlerts = updatedAlerts.map(alert => ({
-        id: alert.alertId,
-        tableId: alert.tableNumber,
-        type: alert.alertType,
-        message: alert.message,
-        timestamp: alert.timestamp,
-        priority: alert.priority,
-        resolved: alert.resolved
-      }));
+      const mappedAlerts = updatedAlerts
+        .filter(alert => alert.alertType !== 'new-order' && alert.alertType !== 'table-occupied') // Excluir alertas de actualización
+        .map(alert => ({
+          id: alert.alertId,
+          tableId: alert.tableNumber,
+          type: alert.alertType as AlertType, // Cast para excluir 'new-order'
+          message: alert.message,
+          timestamp: alert.timestamp,
+          priority: alert.priority,
+          resolved: alert.resolved
+        }));
       setAlerts(mappedAlerts);
       console.log(`✅ Alerta ${alertId} resuelta y lista actualizada`);
     } catch (error) {
@@ -547,10 +684,10 @@ export default function TableManagement() {
               {/* Solo mostrar el total si hay una sesión activa */}
               {table.sessionId && (
                 <Text style={[styles.orderTotal, { color: config.textColor }]}>
-                  €{formatCurrency(table.orderTotal || 0)}
-                  {table.paidAmount && table.paidAmount > 0 && (
-                    <Text style={styles.paidAmount}> (-€{formatCurrency(table.paidAmount)})</Text>
-                  )}
+                  {table.paidAmount && table.paidAmount > 0 
+                    ? `$${formatCurrency(table.paidAmount)}`
+                    : `$${formatCurrency(table.orderTotal || 0)}`
+                  }
                 </Text>
               )}
             </View>
@@ -737,6 +874,13 @@ export default function TableManagement() {
           )}
         </View>
         <View style={styles.headerRight}>
+          <Button
+            title="🔄 Actualizar"
+            onPress={refreshTables}
+            variant="outline"
+            size="sm"
+            style={styles.refreshButton}
+          />
           {user && (
               <Button
                 title="Cerrar Sesión"
@@ -819,7 +963,7 @@ export default function TableManagement() {
               )}
               {selectedTable.orderTotal && (
                 <Text style={styles.infoText}>
-                  <Text style={styles.infoLabel}>Total cuenta:</Text> €{selectedTable.orderTotal}
+                  <Text style={styles.infoLabel}>Total cuenta:</Text> ${selectedTable.orderTotal}
                 </Text>
               )}
             </View>
@@ -989,14 +1133,14 @@ export default function TableManagement() {
           {selectedTable && (
             <>
               <Text style={styles.modalTitle}>Mesa {selectedTable.number}</Text>
-              <Text style={styles.modalSubtitle}>
-                Total: €{selectedTable.orderTotal?.toFixed(2) || '0.00'}
-              </Text>
-              {selectedTable.paidAmount && selectedTable.paidAmount > 0 && (
-                <Text style={styles.modalSubtitle}>
-                  Pagado: €{selectedTable.paidAmount.toFixed(2)}
+                              <Text style={styles.modalSubtitle}>
+                  Total: ${formatCurrency(selectedTable.orderTotal || 0)}
                 </Text>
-              )}
+                {selectedTable.paidAmount && selectedTable.paidAmount > 0 && (
+                  <Text style={styles.modalSubtitle}>
+                    Pagado: ${formatCurrency(selectedTable.paidAmount)}
+                  </Text>
+                )}
 
               <View style={styles.paymentOptions}>
                 <Text style={styles.paymentOptionsTitle}>Opciones de pago:</Text>
@@ -1430,6 +1574,9 @@ const styles = StyleSheet.create({
   },
   logoutButton: {
     marginLeft: 8,
+  },
+  refreshButton: {
+    marginRight: 8,
   },
   alertIndicator: {
     position: 'absolute',

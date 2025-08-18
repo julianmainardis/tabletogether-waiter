@@ -30,6 +30,15 @@ interface MenuViewProps {
 const { width: screenWidth } = Dimensions.get('window');
 const isTablet = screenWidth >= 768;
 
+// Función para formatear moneda en formato español
+const formatCurrency = (amount: number): string => {
+  return new Intl.NumberFormat('es-ES', {
+    style: 'decimal',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  }).format(amount);
+};
+
 // Definir iconos para cada categoría
 const categoryIcons: Record<string, string> = {
   'all': 'restaurant',
@@ -159,10 +168,11 @@ export const MenuView: React.FC<MenuViewProps> = ({
   };
 
   const getTotalPrice = () => {
-    return Object.entries(selectedItems).reduce((total, [itemId, quantity]) => {
+    const total = Object.entries(selectedItems).reduce((total, [itemId, quantity]) => {
       const item = products.find(i => i.id === itemId);
       return total + (item?.price || 0) * quantity;
     }, 0);
+    return Math.round(total * 100) / 100; // Redondear a 2 decimales
   };
 
   const getSelectedItemsList = () => {
@@ -196,7 +206,7 @@ export const MenuView: React.FC<MenuViewProps> = ({
                     {product.description}
                   </Text>
                 )}
-                <Text style={styles.menuItemPrice}>€{product.price.toFixed(2)}</Text>
+                <Text style={styles.menuItemPrice}>${formatCurrency(product.price)}</Text>
               </View>
               <View style={styles.quantityControls}>
                 {quantity > 0 && (
@@ -275,7 +285,7 @@ export const MenuView: React.FC<MenuViewProps> = ({
               currentOrder.map(item => (
                 <View key={item.id} style={styles.currentOrderItem}>
                   <Text style={styles.currentOrderItemText}>
-                    {item.name} x{item.quantity} - €{(item.price * item.quantity).toFixed(2)}
+                    {item.name} x{item.quantity} - ${formatCurrency(item.price * item.quantity)}
                   </Text>
                 </View>
               ))
@@ -348,7 +358,7 @@ export const MenuView: React.FC<MenuViewProps> = ({
         <View style={styles.orderSummary}>
           <View style={styles.orderHeader}>
             <Text style={styles.orderTitle}>Resumen del pedido</Text>
-            <Text style={styles.orderTotal}>€{getTotalPrice().toFixed(2)}</Text>
+                            <Text style={styles.orderTotal}>${formatCurrency(getTotalPrice())}</Text>
           </View>
           
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.selectedItems}>

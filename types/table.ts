@@ -28,6 +28,19 @@ export interface TableAlert {
   resolved: boolean;
 }
 
+export interface TableOrderUpdate {
+  tableNumber: number;
+  orderId: string;
+  total: number;
+  message: string;
+}
+
+export interface TableStatusUpdate {
+  tableNumber: number;
+  userName: string;
+  message: string;
+}
+
 export interface OrderItem {
   id: string;
   name: string;

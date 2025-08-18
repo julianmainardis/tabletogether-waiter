@@ -19,6 +19,15 @@ import { Product } from '../services/productService';
 const { width: screenWidth } = Dimensions.get('window');
 const isTablet = screenWidth >= 768;
 
+// Función para formatear moneda en formato español
+const formatCurrency = (amount: number): string => {
+  return new Intl.NumberFormat('es-ES', {
+    style: 'decimal',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  }).format(amount);
+};
+
 interface ProductDetailDialogProps {
   product: Product | null;
   isVisible: boolean;
@@ -168,7 +177,7 @@ export const ProductDetailDialog: React.FC<ProductDetailDialogProps> = ({
                                     selectedCustomizations[group] === customization.customization_id && 
                                     styles.selectedPriceAdjustment
                                   ]}>
-                                    (+€{customization.customizations.price_adjustment.toFixed(2)})
+                                    (+${formatCurrency(customization.customizations.price_adjustment)})
                                   </Text>
                                 )}
                               </View>
@@ -207,7 +216,7 @@ export const ProductDetailDialog: React.FC<ProductDetailDialogProps> = ({
               
               <View style={styles.priceSection}>
                 <Text style={styles.priceLabel}>Precio total:</Text>
-                <Text style={styles.priceText}>€{(totalPrice * quantity).toFixed(2)}</Text>
+                <Text style={styles.priceText}>${formatCurrency(totalPrice * quantity)}</Text>
               </View>
               
               <Button
