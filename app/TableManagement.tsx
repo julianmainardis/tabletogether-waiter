@@ -328,30 +328,12 @@ export default function TableManagement() {
   // Función para manejar actualizaciones de pedidos de mesa
   const handleTableOrderUpdate = async (data: { tableNumber: number; orderId: string; total: number; message: string }) => {
     const { tableNumber, orderId, total } = data;
-    console.log(`🔄 Actualizando información de mesa ${tableNumber} con nuevo pedido:`, {
+    console.log(`🔄 Nuevo pedido recibido para mesa ${tableNumber}:`, {
       orderId,
       total
     });
 
     try {
-      // Actualizar el estado local de las mesas inmediatamente
-      setTables(prev => prev.map(table => {
-        if (table.number === tableNumber) {
-          console.log(`📊 Actualizando mesa ${tableNumber}:`, {
-            orderTotalAntes: table.orderTotal,
-            orderTotalNuevo: total,
-            paidAmount: table.paidAmount
-          });
-          
-          return {
-            ...table,
-            orderTotal: (table.orderTotal || 0) + total,
-            hasPartialPayment: (table.paidAmount || 0) > 0
-          };
-        }
-        return table;
-      }));
-
       // Animar la mesa para indicar que se actualizó
       setAnimatingTables(prev => new Set([...prev, tableNumber.toString()]));
       
@@ -364,7 +346,7 @@ export default function TableManagement() {
         });
       }, 2000);
 
-      // Opcional: Refrescar datos del backend para asegurar sincronización
+      // Refrescar datos del backend para obtener información actualizada
       setTimeout(async () => {
         try {
           console.log(`🔄 Refrescando datos del backend para mesa ${tableNumber}`);
@@ -372,38 +354,20 @@ export default function TableManagement() {
         } catch (error) {
           console.error('Error refrescando datos del backend:', error);
         }
-      }, 1000);
+      }, 500);
 
     } catch (error) {
-      console.error(`Error actualizando mesa ${tableNumber}:`, error);
+      console.error(`Error procesando actualización de mesa ${tableNumber}:`, error);
     }
   };
 
   // Función para manejar actualizaciones de estado de mesa
   const handleTableStatusUpdate = async (data: { tableNumber: number; userName: string; message: string }) => {
     const { tableNumber, userName } = data;
-    console.log(`🔄 Actualizando estado de mesa ${tableNumber} - Ocupada por:`, userName);
+    console.log(`🔄 Mesa ${tableNumber} ocupada por:`, userName);
     console.log(`📋 Datos recibidos:`, data);
 
     try {
-      // Actualizar el estado local de las mesas inmediatamente
-      setTables(prev => prev.map(table => {
-        if (table.number === tableNumber) {
-          console.log(`📊 Actualizando mesa ${tableNumber}:`, {
-            statusAntes: table.status,
-            statusNuevo: 'occupied'
-          });
-          
-          return {
-            ...table,
-            status: 'occupied' as TableStatus,
-            timeOccupied: new Date().toISOString(),
-            waiter: userName // Temporalmente asignar el usuario como waiter
-          };
-        }
-        return table;
-      }));
-
       // Animar la mesa para indicar que se actualizó
       setAnimatingTables(prev => new Set([...prev, tableNumber.toString()]));
       
@@ -416,7 +380,7 @@ export default function TableManagement() {
         });
       }, 2000);
 
-      // Opcional: Refrescar datos del backend para asegurar sincronización
+      // Refrescar datos del backend para obtener información actualizada
       setTimeout(async () => {
         try {
           console.log(`🔄 Refrescando datos del backend para mesa ${tableNumber}`);
@@ -424,10 +388,10 @@ export default function TableManagement() {
         } catch (error) {
           console.error('Error refrescando datos del backend:', error);
         }
-      }, 1000);
+      }, 500);
 
     } catch (error) {
-      console.error(`Error actualizando mesa ${tableNumber}:`, error);
+      console.error(`Error procesando actualización de estado de mesa ${tableNumber}:`, error);
     }
   };
 
