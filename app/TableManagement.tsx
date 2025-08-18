@@ -56,6 +56,7 @@ export default function TableManagement() {
   const [currentOrderData, setCurrentOrderData] = useState<TableOrdersResponse | null>(null);
   const [loadingCurrentOrder, setLoadingCurrentOrder] = useState(false);
   const [animatingTables, setAnimatingTables] = useState<Set<string>>(new Set());
+  const [showPartialPaymentInput, setShowPartialPaymentInput] = useState(false);
 
   // Convertir datos reales del backend al formato de la aplicación
   useEffect(() => {
@@ -186,7 +187,7 @@ export default function TableManagement() {
           changedTableIds.forEach((id: string) => newSet.delete(id));
           return newSet;
         });
-      }, 2000);
+      }, 1000);
     };
 
     // Escuchar el evento personalizado
@@ -982,48 +983,63 @@ export default function TableManagement() {
       {/* Modal de pago */}
       <Modal
         visible={showPaymentModal}
-        onClose={() => setShowPaymentModal(false)}
+        onClose={() => {
+          setShowPaymentModal(false);
+          setShowPartialPaymentInput(false);
+          setPaymentAmount('');
+        }}
         title="Procesar Pago"
       >
         <View style={styles.modalContent}>
           {selectedTable && (
             <>
-              <Text style={styles.modalTitle}>Mesa {selectedTable.number}</Text>
-              <Text style={styles.modalSubtitle}>
-                Total: €{selectedTable.orderTotal?.toFixed(2) || '0.00'}
-              </Text>
-              {selectedTable.paidAmount && selectedTable.paidAmount > 0 && (
-                <Text style={styles.modalSubtitle}>
-                  Pagado: €{selectedTable.paidAmount.toFixed(2)}
+              <View style={styles.paymentInfo}>
+                <Text style={styles.paymentInfoText}>Mesa {selectedTable.number}</Text>
+                <Text style={styles.paymentInfoText}>
+                  Total a pagar: €{selectedTable.orderTotal?.toFixed(2) || '0.00'}
                 </Text>
-              )}
+                {selectedTable.paidAmount && selectedTable.paidAmount > 0 && (
+                  <Text style={styles.paymentInfoText}>
+                    Pagado: €{selectedTable.paidAmount.toFixed(2)}
+                  </Text>
+                )}
+              </View>
 
-              <View style={styles.paymentOptions}>
-                <Text style={styles.paymentOptionsTitle}>Opciones de pago:</Text>
-                
-                <Button
-                  title="Pago completo"
+              <View style={styles.paymentButtonsContainer}>
+                <TouchableOpacity
+                  style={styles.paymentButton}
                   onPress={handleFullPayment}
-                  style={styles.fullPaymentButton}
-                />
+                >
+                  <Ionicons name="card" size={20} color="#ffffff" style={styles.buttonIcon} />
+                  <Text style={styles.paymentButtonText}>Pago Completo</Text>
+                </TouchableOpacity>
 
+                <TouchableOpacity
+                  style={styles.partialPaymentButton}
+                  onPress={() => setShowPartialPaymentInput(true)}
+                >
+                  <Ionicons name="calculator" size={20} color="#3b82f6" style={styles.buttonIcon} />
+                  <Text style={styles.partialPaymentButtonText}>Pago Parcial</Text>
+                </TouchableOpacity>
+              </View>
+
+              {showPartialPaymentInput && (
                 <View style={styles.partialPaymentSection}>
-                  <Text style={styles.partialPaymentLabel}>Pago parcial:</Text>
                   <TextInput
                     style={styles.paymentInput}
-                    placeholder="Monto a pagar"
+                    placeholder="Ingresa el monto"
                     value={paymentAmount}
                     onChangeText={setPaymentAmount}
                     keyboardType="numeric"
                   />
-                  <Button
-                    title="Procesar pago parcial"
+                  <TouchableOpacity
+                    style={styles.payButton}
                     onPress={handlePartialPayment}
-                    variant="outline"
-                    style={styles.paymentButton}
-                  />
+                  >
+                    <Text style={styles.payButtonText}>Pagar</Text>
+                  </TouchableOpacity>
                 </View>
-              </View>
+              )}
             </>
           )}
         </View>
@@ -1390,9 +1406,7 @@ const styles = StyleSheet.create({
     color: '#374151',
     marginBottom: 4,
   },
-  paymentButton: {
-    marginBottom: 4,
-  },
+
   fullPaymentButton: {
     paddingVertical: 12,
     minHeight: 48,
@@ -1418,7 +1432,7 @@ const styles = StyleSheet.create({
     borderColor: '#d1d5db',
     borderRadius: 8,
     backgroundColor: '#ffffff',
-    width: '60%',
+    width: '100%',
     textAlign: 'center',
   },
   modalTitle: {
@@ -1452,5 +1466,67 @@ const styles = StyleSheet.create({
   inputContainer: {
     width: '100%',
     alignItems: 'center',
+  },
+  paymentButtonsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    marginTop: 16,
+    gap: 12,
+  },
+  paymentButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    minHeight: 48,
+    borderRadius: 8,
+    backgroundColor: '#3b82f6',
+    borderWidth: 1,
+    borderColor: '#3b82f6',
+  },
+  paymentButtonText: {
+    color: '#ffffff',
+    fontSize: isTablet ? 16 : 14,
+    fontWeight: '600',
+    marginLeft: 8,
+  },
+  partialPaymentButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    minHeight: 48,
+    borderRadius: 8,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#3b82f6',
+  },
+  partialPaymentButtonText: {
+    color: '#3b82f6',
+    fontSize: isTablet ? 16 : 14,
+    fontWeight: '600',
+    marginLeft: 8,
+  },
+  buttonIcon: {
+    marginRight: 8,
+  },
+  payButton: {
+    width: '100%',
+    alignSelf: 'center',
+    paddingVertical: 12,
+    minHeight: 48,
+    borderRadius: 8,
+    backgroundColor: '#3b82f6',
+    borderWidth: 1,
+    borderColor: '#3b82f6',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  payButtonText: {
+    color: '#ffffff',
+    fontSize: isTablet ? 16 : 14,
+    fontWeight: '600',
   },
 }); 

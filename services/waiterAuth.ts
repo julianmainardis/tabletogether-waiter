@@ -51,13 +51,13 @@ class WaiterAuthService {
       expiresAt: data.expiresAt
     });
     
-    // Validar que el usuario tenga rol de admin
-    if (data.user.role !== 'admin') {
+    // Validar que el usuario tenga rol de waiter o admin
+    if (!['waiter', 'admin'].includes(data.user.role)) {
       console.error('❌ Rol incorrecto:', data.user.role);
-      throw new Error('Acceso denegado. Solo los administradores pueden acceder a la app de camareros.');
+      throw new Error('Acceso denegado. Solo los camareros y administradores pueden acceder a la app de camareros.');
     }
 
-    console.log('✅ Rol validado correctamente: admin');
+    console.log('✅ Rol validado correctamente:', data.user.role);
 
     this.auth = data;
     

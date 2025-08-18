@@ -1,25 +1,24 @@
-import { useState, useEffect, useRef } from 'react';
-import { waiterAuthService } from '../services/waiterAuth';
-import { alertsService } from '../services/alertsService';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import Constants from 'expo-constants';
+import { waiterAuthService } from '../services/waiterAuth';
 
 const API_BASE_URL = Constants.expoConfig?.extra?.apiUrl || 'http://localhost:3000/api';
 
 export interface TableStatus {
   id: string;
   number: number;
-  capacity?: number;
   status: 'available' | 'occupied' | 'reserved';
-  timeOccupied?: string;
-  waiter?: string;
+  capacity: number;
+  sessionId?: string;
   orderTotal?: number;
   paidAmount?: number;
-  hasPartialPayment: boolean;
-  hasAlerts: boolean;
-  sessionId?: string | null;
+  timeOccupied?: string;
+  waiter?: string;
+  hasPartialPayment?: boolean;
   lastActivity: Date;
   createdAt: Date;
   updatedAt: Date;
+  hasAlerts?: boolean;
 }
 
 export interface TablesResponse {
@@ -31,7 +30,7 @@ export interface TablesResponse {
 
 export const useTables = () => {
   const [tables, setTables] = useState<TableStatus[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [stats, setStats] = useState({
     totalAvailable: 0,
@@ -39,27 +38,21 @@ export const useTables = () => {
     totalTables: 0
   });
 
-  // Referencias para controlar el polling
-  const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  const isPollingRef = useRef(false);
   const previousTablesRef = useRef<TableStatus[]>([]);
-  const isFirstLoadRef = useRef(true); // Nueva referencia para controlar la primera carga
+  const isFirstLoadRef = useRef(true);
 
-  // Función para detectar cambios en las mesas
   const detectChanges = (newTables: TableStatus[], oldTables: TableStatus[]) => {
-    if (oldTables.length === 0) return []; // Primera carga, no hay cambios
+    if (oldTables.length === 0) return [];
     
     const changedTableIds: string[] = [];
     
     newTables.forEach(newTable => {
       const oldTable = oldTables.find(t => t.id === newTable.id);
       if (!oldTable) {
-        // Nueva mesa
         changedTableIds.push(newTable.id);
         return;
       }
       
-      // Verificar cambios en propiedades importantes
       if (
         oldTable.status !== newTable.status ||
         oldTable.orderTotal !== newTable.orderTotal ||
@@ -76,30 +69,23 @@ export const useTables = () => {
 
   const fetchTables = async () => {
     try {
-      // Solo mostrar loading en la primera carga
       if (isFirstLoadRef.current) {
         setLoading(true);
-        
-        // Timeout de seguridad para evitar loading infinito
-        setTimeout(() => {
-          if (isFirstLoadRef.current) {
-            console.warn('⚠️ Timeout de seguridad: forzando fin del loading');
-            setLoading(false);
-            isFirstLoadRef.current = false;
-          }
-        }, 10000); // 10 segundos de timeout
       }
-      setError(null);
 
       const auth = waiterAuthService.getCurrentAuth();
+      console.log('🔐 Auth status:', auth ? 'Presente' : 'Ausente');
       if (!auth) {
+        console.log('❌ No hay sesión activa');
         throw new Error('No hay sesión activa');
       }
+      console.log('✅ Token presente:', auth.token ? 'SÍ' : 'NO');
 
-      console.log('🔄 Fetching tables from:', `${API_BASE_URL}/admin/tables`);
-      console.log('🔐 Auth token present:', !!auth.token);
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Timeout: La solicitud tardó demasiado')), 10000);
+      });
 
-      const response = await fetch(`${API_BASE_URL}/admin/tables`, {
+      const fetchPromise = fetch(`${API_BASE_URL}/admin/tables`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -107,23 +93,25 @@ export const useTables = () => {
         },
       });
 
-      console.log('📡 Response status:', response.status);
+      const response = await Promise.race([fetchPromise, timeoutPromise]) as Response;
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        console.error('❌ Error response:', errorData);
-        throw new Error(errorData.message || 'Error al obtener las mesas');
+        console.log('❌ Response status:', response.status);
+        console.log('❌ Response status text:', response.statusText);
+        const errorText = await response.text();
+        console.log('❌ Error response:', errorText);
+        throw new Error(`Error al obtener las mesas: ${response.status} ${response.statusText}`);
       }
 
       const data: TablesResponse = await response.json();
-      console.log('✅ Tables data received:', {
+      
+      console.log('📊 Datos de mesas recibidos:', {
         totalTables: data.totalTables,
         totalAvailable: data.totalAvailable,
         totalOccupied: data.totalOccupied,
         tablesCount: data.tables.length
       });
-      
-      // Log details for each table
+
       data.tables.forEach((table, index) => {
         console.log(`📊 Mesa ${table.number}:`, {
           status: table.status,
@@ -134,7 +122,6 @@ export const useTables = () => {
         });
       });
       
-      // Convertir las fechas de string a Date
       const tablesWithDates = data.tables.map(table => ({
         ...table,
         lastActivity: new Date(table.lastActivity),
@@ -142,10 +129,7 @@ export const useTables = () => {
         updatedAt: new Date(table.updatedAt)
       }));
 
-      // Detectar cambios antes de actualizar el estado
       const changedTableIds = detectChanges(tablesWithDates, previousTablesRef.current);
-      
-      // Actualizar la referencia anterior
       previousTablesRef.current = tablesWithDates;
 
       setTables(tablesWithDates);
@@ -155,60 +139,46 @@ export const useTables = () => {
         totalTables: data.totalTables
       });
 
-      // Log de cambios detectados (sin eventos personalizados)
       if (changedTableIds.length > 0) {
         console.log('🔄 Cambios detectados en mesas:', changedTableIds);
       }
 
-      // Marcar que ya no es la primera carga
       isFirstLoadRef.current = false;
 
     } catch (error: any) {
       console.error('❌ Error fetching tables:', error);
       setError(error.message || 'Error al obtener las mesas');
-      // En caso de error, también marcar que ya no es la primera carga
       isFirstLoadRef.current = false;
     } finally {
       setLoading(false);
     }
   };
 
-  // Función para iniciar el polling automático
-  const startPolling = () => {
-    if (isPollingRef.current) return;
-    
-    isPollingRef.current = true;
-    console.log('🔄 Iniciando polling automático cada 5 segundos');
-    
-    pollingIntervalRef.current = setInterval(() => {
-      console.log('⏰ Polling automático - actualizando mesas...');
-      //fetchTables();
-    }, 5000); // Actualizar cada 5 segundos
-  };
-
-  // Función para detener el polling
-  const stopPolling = () => {
-    if (pollingIntervalRef.current) {
-      clearInterval(pollingIntervalRef.current);
-      pollingIntervalRef.current = null;
-    }
-    isPollingRef.current = false;
-    console.log('⏹️ Polling automático detenido');
-  };
-
-  // Efecto para manejar la actualización automática
   useEffect(() => {
-    // Carga inicial
-    fetchTables();
-    
-    // Iniciar polling automático
-    //startPolling();
-
-    // Cleanup al desmontar
-    return () => {
-      stopPolling();
-    };
+    // Solo cargar las mesas si hay autenticación
+    const auth = waiterAuthService.getCurrentAuth();
+    if (auth) {
+      console.log('🔐 Usuario autenticado, cargando mesas...');
+      fetchTables();
+    } else {
+      console.log('🔐 Usuario no autenticado, no cargando mesas');
+    }
   }, []);
+
+  // Efecto para recargar cuando cambie la autenticación
+  useEffect(() => {
+    const checkAuthAndLoad = () => {
+      const auth = waiterAuthService.getCurrentAuth();
+      if (auth && tables.length === 0) {
+        console.log('🔐 Usuario autenticado detectado, cargando mesas...');
+        fetchTables();
+      }
+    };
+
+    // Verificar cada 2 segundos si el usuario se autenticó
+    const interval = setInterval(checkAuthAndLoad, 2000);
+    return () => clearInterval(interval);
+  }, [tables.length]);
 
   const refreshTables = () => {
     console.log('🔄 Actualización manual solicitada');
