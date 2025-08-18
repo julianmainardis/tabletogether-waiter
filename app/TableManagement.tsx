@@ -57,6 +57,17 @@ export default function TableManagement() {
   const [loadingCurrentOrder, setLoadingCurrentOrder] = useState(false);
   const [animatingTables, setAnimatingTables] = useState<Set<string>>(new Set());
   const [showPartialPaymentInput, setShowPartialPaymentInput] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  // Función para actualizar las mesas con animación
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    try {
+      await refreshTables();
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
 
   // Convertir datos reales del backend al formato de la aplicación
   useEffect(() => {
@@ -738,6 +749,22 @@ export default function TableManagement() {
           )}
         </View>
         <View style={styles.headerRight}>
+          <TouchableOpacity
+            onPress={handleRefresh}
+            style={styles.refreshButton}
+            disabled={loading || isRefreshing}
+          >
+            <Ionicons 
+              name="refresh" 
+              size={24} 
+              color={(loading || isRefreshing) ? "#9ca3af" : "#3b82f6"} 
+              style={[
+                isRefreshing && {
+                  transform: [{ rotate: '360deg' }],
+                }
+              ]}
+            />
+          </TouchableOpacity>
           {user && (
               <Button
                 title="Cerrar Sesión"
@@ -1444,6 +1471,16 @@ const styles = StyleSheet.create({
   },
   logoutButton: {
     marginLeft: 8,
+  },
+  refreshButton: {
+    padding: 8,
+    marginRight: 8,
+    borderRadius: 8,
+    backgroundColor: '#f3f4f6',
+    justifyContent: 'center',
+    alignItems: 'center',
+    minWidth: 40,
+    minHeight: 40,
   },
   alertIndicator: {
     position: 'absolute',
