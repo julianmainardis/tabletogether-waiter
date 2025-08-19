@@ -43,7 +43,10 @@ class AlertsService {
 
   constructor() {
     this.initializeSocket();
-    this.loadAlertsFromStorage();
+    this.loadAlertsFromStorage().then(() => {
+      // Validar alertas después de cargarlas
+      this.validateOrderReadyAlerts();
+    });
   }
 
   private async loadAlertsFromStorage() {
@@ -55,19 +58,29 @@ class AlertsService {
         console.log('🔍 Detalle de alertas:', parsedAlerts.map((a: any) => ({
           id: a.alertId,
           resolved: a.resolved,
-          message: a.message
+          message: a.message,
+          timestamp: a.timestamp
         })));
-        
-        // Solo cargar alertas no resueltas
-        const activeAlerts = parsedAlerts.filter((alert: any) => !alert.resolved);
+
+        // Filtrar alertas antiguas (más de 24 horas)
+        const oneDayAgo = new Date();
+        oneDayAgo.setDate(oneDayAgo.getDate() - 1);
+
+        const recentAlerts = parsedAlerts.filter((alert: any) => {
+          const alertDate = new Date(alert.timestamp);
+          return alertDate > oneDayAgo;
+        });
+
+
+        const activeAlerts = recentAlerts.filter((alert: any) => !alert.resolved);
         this.alerts = activeAlerts.map((alert: any) => ({
           ...alert,
           timestamp: new Date(alert.timestamp)
         }));
-        console.log('📋 Alertas activas cargadas desde almacenamiento:', this.alerts.length);
-        console.log('🗑️ Alertas resueltas filtradas:', parsedAlerts.length - this.alerts.length);
-      } else {
-        console.log('📭 No hay alertas almacenadas');
+
+
+        // Guardar las alertas limpias de vuelta al almacenamiento
+        await AsyncStorage.setItem('waiter_alerts', JSON.stringify(recentAlerts));
       }
     } catch (error) {
       console.error('❌ Error cargando alertas desde almacenamiento:', error);
@@ -76,16 +89,10 @@ class AlertsService {
 
   private async saveAlertsToStorage() {
     try {
-      console.log('💾 Guardando alertas en almacenamiento:', this.alerts.length);
-      console.log('💾 Detalle de alertas a guardar:', this.alerts.map(a => ({
-        id: a.alertId,
-        resolved: a.resolved,
-        message: a.message
-      })));
       
+
       await AsyncStorage.setItem('waiter_alerts', JSON.stringify(this.alerts));
-      console.log('✅ Alertas guardadas en almacenamiento:', this.alerts.length);
-    } catch (error) {
+      } catch (error) {
       console.error('❌ Error guardando alertas en almacenamiento:', error);
     }
   }
@@ -93,7 +100,7 @@ class AlertsService {
   private initializeSocket() {
     try {
       console.log('🔌 Inicializando conexión WebSocket...');
-      
+
       this.socket = io(WS_BASE_URL, {
         path: '/socket.io',
         transports: ['websocket', 'polling'],
@@ -116,11 +123,11 @@ class AlertsService {
       console.log('✅ Conectado al servidor de alertas');
       this.isConnected = true;
       this.reconnectAttempts = 0;
-      
+
       // Unirse a la sala de camareros
       const auth = waiterAuthService.getCurrentAuth();
       console.log('🔍 Verificando autenticación para unirse a sala:', auth);
-      
+
       if (auth) {
         console.log('👤 Usuario autenticado:', auth.user);
         this.joinWaiterRoom(auth.user.id);
@@ -183,16 +190,16 @@ class AlertsService {
   private handleNewAlert(alert: TableAlert) {
     // Aquí puedes implementar la lógica para mostrar notificaciones
     // Por ejemplo, usar expo-notifications o mostrar un modal
-    
+
     // Por ahora, solo logueamos la alerta
     console.log(`🚨 ALERTA: Mesa ${alert.tableNumber} - ${alert.message}`);
-    
+
     // Manejo específico para diferentes tipos de alerta
     switch (alert.alertType) {
       case 'new-order':
         console.log(`🍽️ NUEVO PEDIDO: Mesa ${alert.tableNumber} - Pedido #${alert.orderId} - Total: $${alert.total}`);
         console.log(`📋 Detalles del pedido: ${alert.message}`);
-        
+
         // Para alertas de nuevo pedido, NO las guardamos como alertas persistentes
         // Solo emitimos el evento para actualizar la información de la mesa
         this.emitCustomEvent('new-table-alert', alert);
@@ -203,37 +210,28 @@ class AlertsService {
           message: alert.message
         });
         return; // Salir sin guardar la alerta
-        
       case 'table-occupied':
-        console.log(`🪑 MESA OCUPADA: Mesa ${alert.tableNumber} - Usuario: ${alert.userName}`);
-        console.log(`📋 Detalles: ${alert.message}`);
-        console.log(`📋 Emitiendo evento 'table-status-updated'`);
-        
-        // Para alertas de mesa ocupada, NO las guardamos como alertas persistentes
-        // Solo emitimos el evento para actualizar la información de la mesa
         this.emitCustomEvent('new-table-alert', alert);
         this.emitCustomEvent('table-status-updated', {
           tableNumber: alert.tableNumber,
           userName: alert.userName,
           message: alert.message
         });
-        console.log(`✅ Evento 'table-status-updated' emitido para mesa ${alert.tableNumber}`);
-        return; // Salir sin guardar la alerta
         
+        return; // Salir sin guardar la alerta
+
       case 'order-ready':
-        console.log(`✅ PEDIDO LISTO: Mesa ${alert.tableNumber} - Pedido #${alert.orderId}`);
         break;
       case 'waiter-call':
-        console.log(`📞 LLAMADA AL MESERO: Mesa ${alert.tableNumber} - ${alert.message}`);
         break;
       default:
         console.log(`🚨 ALERTA GENERAL: Mesa ${alert.tableNumber} - ${alert.message}`);
     }
-    
+
     // Agregar la alerta a la lista local (solo para alertas que requieren atención)
     this.alerts.push(alert);
     this.saveAlertsToStorage();
-    
+
     // Emitir evento personalizado para que otros componentes puedan escuchar
     // En React Native usamos un sistema de eventos personalizado
     this.emitCustomEvent('new-table-alert', alert);
@@ -242,18 +240,18 @@ class AlertsService {
   private handleAlertResolved(alertId: string) {
     console.log(`✅ Alerta ${alertId} resuelta desde servidor`);
     console.log(`📋 Alertas antes de marcar como resuelta: ${this.alerts.length}`);
-    
+
     // Marcar la alerta como resuelta en lugar de eliminarla
-    this.alerts = this.alerts.map(alert => 
+    this.alerts = this.alerts.map(alert =>
       alert.alertId === alertId ? { ...alert, resolved: true } : alert
     );
     this.saveAlertsToStorage();
-    
+
     console.log(`📋 Alertas después de marcar como resuelta: ${this.alerts.length}`);
-    
+
     // Limpiar alertas resueltas del almacenamiento
     this.cleanupResolvedAlertsFromStorage();
-    
+
     // Emitir evento personalizado
     this.emitCustomEvent('alert-resolved', { alertId });
   }
@@ -272,51 +270,29 @@ class AlertsService {
   public async cleanupResolvedAlerts() {
     const oneDayAgo = new Date();
     oneDayAgo.setDate(oneDayAgo.getDate() - 1);
-    
-    this.alerts = this.alerts.filter(alert => 
+
+    this.alerts = this.alerts.filter(alert =>
       !alert.resolved || alert.timestamp > oneDayAgo
     );
-    
+
     await this.saveAlertsToStorage();
   }
 
-  // Método para limpiar completamente las alertas resueltas del almacenamiento
   public async cleanupResolvedAlertsFromStorage() {
     try {
       const storedAlerts = await AsyncStorage.getItem('waiter_alerts');
       if (storedAlerts) {
         const parsedAlerts = JSON.parse(storedAlerts);
-        console.log('🧹 Alertas en almacenamiento antes de limpiar:', parsedAlerts.length);
-        
-        // Solo mantener alertas no resueltas
+
         const activeAlerts = parsedAlerts.filter((alert: any) => !alert.resolved);
-        
-        console.log('🧹 Alertas activas después de filtrar:', activeAlerts.length);
-        
-        // Guardar solo las alertas activas
+
         await AsyncStorage.setItem('waiter_alerts', JSON.stringify(activeAlerts));
-        console.log('🧹 Limpieza de almacenamiento completada. Alertas activas:', activeAlerts.length);
       }
     } catch (error) {
       console.error('❌ Error limpiando alertas resueltas del almacenamiento:', error);
     }
   }
 
-  // Método para verificar el estado del almacenamiento
-  public async debugStorage() {
-    try {
-      const storedAlerts = await AsyncStorage.getItem('waiter_alerts');
-      if (storedAlerts) {
-        const parsedAlerts = JSON.parse(storedAlerts);
-        console.log('🔍 DEBUG - Alertas en almacenamiento:', parsedAlerts.length);
-        console.log('🔍 DEBUG - Detalle completo:', parsedAlerts);
-      } else {
-        console.log('🔍 DEBUG - No hay alertas en almacenamiento');
-      }
-    } catch (error) {
-      console.error('❌ Error en debugStorage:', error);
-    }
-  }
 
   // Método para limpiar completamente el almacenamiento (para testing)
   public async clearAllAlerts() {
@@ -329,23 +305,62 @@ class AlertsService {
     }
   }
 
-  // Método temporal para forzar limpieza de alertas resueltas (para testing)
-  public async forceCleanupResolved() {
-    console.log('🧹 Forzando limpieza de alertas resueltas...');
-    await this.cleanupResolvedAlertsFromStorage();
-    await this.debugStorage();
+  // Método para limpiar alertas de order-ready que no tienen pedidos correspondientes
+  public async validateOrderReadyAlerts() {
+    try {
+      console.log('🔍 Validando alertas de order-ready...');
+
+      const orderReadyAlerts = this.alerts.filter(alert => alert.alertType === 'order-ready');
+      console.log(`📋 Encontradas ${orderReadyAlerts.length} alertas de order-ready`);
+
+      if (orderReadyAlerts.length === 0) {
+        console.log('✅ No hay alertas de order-ready para validar');
+        return;
+      }
+
+      // Por ahora, vamos a limpiar todas las alertas de order-ready antiguas
+      // ya que no tenemos acceso directo a la base de datos desde el frontend
+      const oneHourAgo = new Date();
+      oneHourAgo.setHours(oneHourAgo.getHours() - 1);
+
+      const validOrderReadyAlerts = orderReadyAlerts.filter(alert => {
+        const alertDate = new Date(alert.timestamp);
+        return alertDate > oneHourAgo;
+      });
+
+      const removedCount = orderReadyAlerts.length - validOrderReadyAlerts.length;
+      console.log(`🗑️ Removidas ${removedCount} alertas de order-ready antiguas`);
+
+      // Actualizar la lista de alertas
+      this.alerts = this.alerts.filter(alert => {
+        if (alert.alertType === 'order-ready') {
+          const alertDate = new Date(alert.timestamp);
+          return alertDate > oneHourAgo;
+        }
+        return true; // Mantener otras alertas
+      });
+
+      // Guardar cambios
+      await this.saveAlertsToStorage();
+      console.log('✅ Validación de alertas order-ready completada');
+
+    } catch (error) {
+      console.error('❌ Error validando alertas order-ready:', error);
+    }
   }
+
+
 
   // Método para limpiar completamente y recargar (más agresivo)
   public async forceCleanAndReload() {
     console.log('🧹 Limpieza completa y recarga...');
-    
+
     // Limpiar almacenamiento
     await this.cleanupResolvedAlertsFromStorage();
-    
+
     // Recargar desde almacenamiento limpio
     await this.loadAlertsFromStorage();
-    
+
     console.log('📋 Alertas después de limpieza completa:', this.alerts.length);
     await this.debugStorage();
   }
@@ -434,31 +449,43 @@ class AlertsService {
 
       // Encontrar la alerta para verificar su tipo
       const alert = this.alerts.find(a => a.alertId === alertId);
+ 
+
       
-      this.socket.emit('resolve-alert', { alertId }, (response: any) => {
+      this.socket.emit('resolve-alert', {
+        alertId,
+        alertType: alert?.alertType,
+        orderId: alert?.orderId,
+        tableId: alert?.tableId
+      }, (response: any) => {
+        console.log(`📡 Respuesta del servidor para resolución de alerta:`, response);
         if (response.success) {
           console.log(`✅ Servidor confirmó resolución de alerta: ${alertId}`);
-          
-          // Marcar la alerta como resuelta en lugar de eliminarla
-          this.alerts = this.alerts.map(a => 
+          this.alerts = this.alerts.map(a =>
             a.alertId === alertId ? { ...a, resolved: true } : a
           );
           console.log(`📋 Alertas después de marcar como resuelta: ${this.alerts.length}`);
-          
+
           // Guardar estado actualizado
           this.saveAlertsToStorage();
-          
+
           // Limpiar alertas resueltas del almacenamiento
           this.cleanupResolvedAlertsFromStorage();
-          
-          // Verificar estado final
-          this.debugStorage();
-          
+
           // Si es una alerta de pedido listo, también actualizar el estado del pedido
-          if (alert && alert.alertType === 'order-ready') {
-            this.updateOrderToDelivered(alert.tableId);
+       
+
+          if (alert && alert.alertType === 'order-ready' && alert.orderId) {
+            console.log(`🔍 Alerta de pedido listo detectada, orderId: ${alert.orderId}`);
+            console.log(`🚀 Iniciando llamada a markOrderAsDelivered...`);
+            // Llamar al endpoint HTTP para marcar como entregado
+            this.markOrderAsDelivered(alert.orderId).catch(error => {
+              console.error('❌ Error al marcar pedido como entregado:', error);
+            });
+          } else {
+            console.log(`🔍 Alerta resuelta (no es order-ready): ${alert?.alertType}`);
           }
-          
+
           resolve(response);
         } else {
           console.error(`❌ Error del servidor al resolver alerta: ${alertId}`);
@@ -468,22 +495,51 @@ class AlertsService {
     });
   }
 
-  private updateOrderToDelivered(tableId: string) {
-    if (!this.socket || !this.isConnected) {
-      console.error('Socket no conectado para actualizar pedido');
-      return;
-    }
+  private async markOrderAsDelivered(orderId: string) {
+    try {
+      console.log(`📦 Marcando pedido ${orderId} como entregado`);
 
-    console.log(`🔄 Enviando evento para marcar pedido como entregado para mesa: ${tableId}`);
+      // Obtener token de autenticación
+      const auth = waiterAuthService.getCurrentAuth();
+      console.log(`🔐 Estado de autenticación:`, {
+        hasAuth: !!auth,
+        hasToken: !!auth?.token,
+        tokenLength: auth?.token?.length || 0
+      });
 
-    // Enviar evento para marcar el pedido como entregado
-    this.socket.emit('order:mark-delivered', { tableId }, (response: any) => {
-      if (response.success) {
-        console.log('✅ Pedido marcado como entregado para mesa:', tableId);
-      } else {
-        console.error('❌ Error marcando pedido como entregado:', response.error);
+      if (!auth?.token) {
+        console.error('❌ No hay token de autenticación disponible');
+        return;
       }
-    });
+
+      const url = `${API_BASE_URL}/kitchen/orders/${orderId}/delivered`;
+      console.log(`🌐 Llamando endpoint: ${url}`);
+
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${auth.token}`
+        }
+      });
+
+      console.log(`📡 Respuesta del servidor:`, {
+        status: response.status,
+        statusText: response.statusText,
+        ok: response.ok
+      });
+
+      if (response.ok) {
+        const responseData = await response.json();
+        console.log('✅ Pedido marcado como entregado:', orderId, responseData);
+        console.log('📤 Evento emitido a la cocina para actualizar UI');
+      } else {
+        const errorData = await response.text();
+        console.error('❌ Error marcando pedido como entregado:', response.statusText, errorData);
+      }
+    } catch (error) {
+      console.error('❌ Error en markOrderAsDelivered:', error);
+    }
   }
 
   public isConnectedToServer(): boolean {

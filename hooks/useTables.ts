@@ -104,23 +104,6 @@ export const useTables = () => {
 
       const data: TablesResponse = await response.json();
 
-      console.log('📊 Datos de mesas recibidos:', {
-        totalTables: data.totalTables,
-        totalAvailable: data.totalAvailable,
-        totalOccupied: data.totalOccupied,
-        tablesCount: data.tables.length
-      });
-
-      data.tables.forEach((table, index) => {
-        console.log(`📊 Mesa ${table.number}:`, {
-          status: table.status,
-          sessionId: table.sessionId,
-          orderTotal: table.orderTotal,
-          paidAmount: table.paidAmount,
-          hasAlerts: table.hasAlerts
-        });
-      });
-
       const tablesWithDates = data.tables.map(table => ({
         ...table,
         lastActivity: new Date(table.lastActivity),

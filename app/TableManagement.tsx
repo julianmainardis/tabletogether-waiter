@@ -15,11 +15,10 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { Button } from '../components/ui/button';
 import { Card, CardContent } from '../components/ui/card';
-import { Badge } from '../components/ui/badge';
 import { Alert as UIAlert, AlertDescription } from '../components/ui/alert';
 import Modal from '../components/ui/Modal';
 import { MenuView } from '../components/MenuView';
-import { Table, TableStatus, TableAlert, AlertType, TableOrderUpdate, TableStatusUpdate } from '../types/table';
+import { Table, TableStatus, TableAlert, AlertType } from '../types/table';
 import { statusConfig, alertConfig } from '../data/mockData';
 import { useWaiterAuth } from '../contexts/WaiterAuthContext';
 import { useTables, TableStatus as RealTableStatus } from '../hooks/useTables';
@@ -59,20 +58,11 @@ export default function TableManagement() {
   const [showPartialPaymentInput, setShowPartialPaymentInput] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  // Función para actualizar las mesas con animación
-  const handleRefresh = async () => {
-    setIsRefreshing(true);
-    try {
-      await refreshTables();
-    } finally {
-      setIsRefreshing(false);
-    }
-  };
+ 
 
   // Convertir datos reales del backend al formato de la aplicación
   useEffect(() => {
     if (realTables.length > 0) {
-      console.log('🔄 Convirtiendo datos del backend:', realTables.length, 'mesas');
       
       const convertedTables: Table[] = realTables.map((realTable: RealTableStatus) => {
         const convertedTable = {
@@ -91,19 +81,11 @@ export default function TableManagement() {
           timeOccupied: realTable.timeOccupied,
           realId: realTable.id // Agregar el ID real para usar en las llamadas al API
         };
-        
-        console.log(`📊 Mesa ${realTable.number}:`, {
-          orderTotal: realTable.orderTotal,
-          paidAmount: realTable.paidAmount,
-          status: realTable.status,
-          convertedOrderTotal: convertedTable.orderTotal,
-          convertedPaidAmount: convertedTable.paidAmount
-        });
+     
         
         return convertedTable;
       });
       
-      console.log('✅ Mesas convertidas:', convertedTables.length);
       setTables(convertedTables);
     }
   }, [realTables, user]);
@@ -132,17 +114,11 @@ export default function TableManagement() {
     
     const handleNewAlert = (alert: any) => {
       console.log('🚨 Nueva alerta recibida en TableManagement:', alert);
-      console.log('📊 Estado actual de alertas:', alerts);
       
       // Manejo especial para alertas de nuevo pedido
       if (alert.alertType === 'new-order') {
         console.log('🍽️ Nuevo pedido detectado para mesa:', alert.tableNumber);
-        console.log('📋 Detalles del pedido:', {
-          orderId: alert.orderId,
-          total: alert.total,
-          message: alert.message
-        });
-        
+     
         // Actualizar automáticamente la información de la mesa
         handleTableOrderUpdate({
           tableNumber: alert.tableNumber,
@@ -170,7 +146,6 @@ export default function TableManagement() {
         console.log('➕ Agregando nueva alerta:', newAlert);
         setAlerts(prev => {
           const updated = [...prev, newAlert];
-          console.log('📋 Lista actualizada de alertas:', updated);
           return updated;
         });
       }
@@ -186,11 +161,7 @@ export default function TableManagement() {
       ));
     };
 
-    // Verificar si el servicio está conectado
-    console.log('🔍 Estado del alertsService:', {
-      isConnected: alertsService.isConnectedToServer()
-    });
-
+  
     // Verificar que el alertsService esté escuchando eventos
     console.log('🎧 Configurando event listeners para alertas');
     
@@ -210,33 +181,9 @@ export default function TableManagement() {
     };
   }, []);
 
-  // Monitorear el estado del modal de pago
-  useEffect(() => {
-    console.log('💰 Estado del modal de pago:', showPaymentModal);
-  }, [showPaymentModal]);
 
-  // Escuchar eventos de actualización de mesas para animaciones
-  useEffect(() => {
-    // Función para manejar animaciones de mesas (sin eventos personalizados)
-    const handleTablesUpdated = (changedTableIds: string[]) => {
-      setAnimatingTables(prev => new Set([...prev, ...changedTableIds]));
-      
-      setTimeout(() => {
-        setAnimatingTables(prev => {
-          const newSet = new Set(prev);
-          changedTableIds.forEach((id: string) => newSet.delete(id));
-          return newSet;
-        });
-      }, 1000);
-    };
 
-    // Escuchar el evento personalizado
-    // window.addEventListener('tables-updated', handleTablesUpdated); // Eliminado
 
-    return () => {
-      // window.removeEventListener('tables-updated', handleTablesUpdated); // Eliminado
-    };
-  }, []);
 
   // Filtrar mesas según el estado seleccionado
   const filteredTables = tables.filter(table => {
@@ -349,7 +296,6 @@ export default function TableManagement() {
       // Refrescar datos del backend para obtener información actualizada
       setTimeout(async () => {
         try {
-          console.log(`🔄 Refrescando datos del backend para mesa ${tableNumber}`);
           await refreshTables();
         } catch (error) {
           console.error('Error refrescando datos del backend:', error);
@@ -364,8 +310,6 @@ export default function TableManagement() {
   // Función para manejar actualizaciones de estado de mesa
   const handleTableStatusUpdate = async (data: { tableNumber: number; userName: string; message: string }) => {
     const { tableNumber, userName } = data;
-    console.log(`🔄 Mesa ${tableNumber} ocupada por:`, userName);
-    console.log(`📋 Datos recibidos:`, data);
 
     try {
       // Animar la mesa para indicar que se actualizó
@@ -413,6 +357,7 @@ export default function TableManagement() {
           priority: alert.priority,
           resolved: alert.resolved
         }));
+      
       setAlerts(mappedAlerts);
       console.log(`✅ Alerta ${alertId} resuelta y lista actualizada`);
     } catch (error) {
@@ -531,7 +476,6 @@ export default function TableManagement() {
         );
       }
       
-      console.log('📋 Items convertidos:', currentOrderItems);
       setTableOrders(prev => ({
         ...prev,
         [tableId]: currentOrderItems
@@ -550,10 +494,8 @@ export default function TableManagement() {
   };
 
   const handlePaymentRequest = (table: Table) => {
-    console.log('💰 Abriendo modal de pago para mesa:', table.number);
     setSelectedTable(table);
     setShowPaymentModal(true);
-    console.log('✅ Estado del modal actualizado a true');
   };
 
   const handlePartialPayment = () => {
@@ -622,14 +564,6 @@ export default function TableManagement() {
     const order = tableOrders[table.id] || [];
     const isAnimating = animatingTables.has(table.id.toString());
 
-    // Debug: Log de los datos de la mesa
-    console.log(`Mesa ${table.number}:`, {
-      orderTotal: table.orderTotal,
-      paidAmount: table.paidAmount,
-      status: table.status,
-      hasAlert,
-      isAnimating
-    });
 
     return (
       <TouchableOpacity
@@ -969,7 +903,10 @@ export default function TableManagement() {
                           </Text>
                           <Button
                             title="Resolver"
-                            onPress={() => resolveAlert(alert.id)}
+                            onPress={() => {
+                              console.log('🔘 Botón resolver presionado para alerta:', alert.id);
+                              resolveAlert(alert.id);
+                            }}
                             variant="ghost"
                             size="sm"
                           />
