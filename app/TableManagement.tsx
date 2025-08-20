@@ -82,6 +82,8 @@ export default function TableManagement() {
           timeOccupied: realTable.timeOccupied,
           realId: realTable.id // Agregar el ID real para usar en las llamadas al API
         };
+        
+
      
         
         return convertedTable;
@@ -248,12 +250,40 @@ export default function TableManagement() {
       });
 
       // Usar el nuevo servicio de pagos
-      const paymentResult = await paymentService.processPayment(realTable.id, amount, isFullPayment);
+      const paymentResult = await paymentService.processTablePayment(realTable.id, amount, 'card');
       
       console.log(`✅ Resultado del pago:`, paymentResult);
 
-      // Refrescar los datos del backend
+      // Actualizar inmediatamente el estado local con la información del pago
+      if (paymentResult.success) {
+        setTables(prev => prev.map(table => {
+          if (table.number === tableId) {
+            return {
+              ...table,
+              paidAmount: paymentResult.newPaidAmount || 0
+            };
+          }
+          return table;
+        }));
+
+        // También actualizar selectedTable si está abierto el modal
+        if (selectedTable && selectedTable.number === tableId) {
+          setSelectedTable(prev => prev ? {
+            ...prev,
+            paidAmount: paymentResult.newPaidAmount || 0
+          } : null);
+        }
+      }
+
+      // Refrescar los datos del backend para asegurar sincronización
       await refreshTables();
+
+      // Mostrar confirmación al usuario
+      Alert.alert(
+        "Pago Exitoso",
+        `Se procesó el pago de $${amount.toFixed(2)}.\n${paymentResult.message}`,
+        [{ text: "OK" }]
+      );
 
     } catch (error) {
       console.error('Error processing payment:', error);
@@ -503,6 +533,7 @@ export default function TableManagement() {
 
   const handlePaymentRequest = (table: Table) => {
     setSelectedTable(table);
+    setShowTableModal(false);
     setShowPaymentModal(true);
   };
 
@@ -512,17 +543,53 @@ export default function TableManagement() {
       setValidationError('Por favor ingrese un monto válido');
       return;
     }
-    if (selectedTable && amount > (selectedTable.orderTotal || 0)) {
-      setValidationError('El monto no puede ser mayor al total');
+
+    // Encontrar la mesa en los datos reales del backend
+    const realTable = realTables.find(t => t.number === selectedTable?.number);
+    if (!realTable) {
+      setValidationError('No se pudo identificar la mesa');
       return;
     }
+
+    // Validar contra el total real del backend
+    const remainingAmount = (realTable.orderTotal || 0) - (realTable.paidAmount || 0);
+    if (amount > remainingAmount) {
+      setValidationError(`El monto no puede ser mayor a $${remainingAmount.toFixed(2)} (restante)`);
+      return;
+    }
+
     processPayment(selectedTable!.id, amount, false);
   };
 
-  const handleFullPayment = () => {
+  const handleFullPayment = async () => {
     if (selectedTable) {
-      const remainingAmount = (selectedTable.orderTotal || 0) - (selectedTable.paidAmount || 0);
-      processPayment(selectedTable.id, remainingAmount, true);
+      try {
+        // Encontrar la mesa en los datos reales del backend
+        const realTable = realTables.find(t => t.number === selectedTable.number);
+        if (!realTable) {
+          console.error('Table not found in backend data');
+          return;
+        }
+
+        // Calcular el monto restante usando los datos reales del backend
+        const remainingAmount = (realTable.orderTotal || 0) - (realTable.paidAmount || 0);
+        
+        console.log(`💰 Calculando pago completo:`, {
+          orderTotal: realTable.orderTotal,
+          paidAmount: realTable.paidAmount,
+          remainingAmount
+        });
+
+        if (remainingAmount <= 0) {
+          Alert.alert('Información', 'La cuenta ya está pagada completamente');
+          return;
+        }
+
+        processPayment(selectedTable.id, remainingAmount, true);
+      } catch (error) {
+        console.error('Error calculating full payment:', error);
+        Alert.alert('Error', 'No se pudo calcular el monto del pago');
+      }
     }
   };
 
@@ -658,12 +725,16 @@ export default function TableManagement() {
               
               {/* Solo mostrar el total si hay una sesión activa */}
               {table.sessionId && (
-                <Text style={[styles.orderTotal, { color: config.textColor }]}>
-                  {table.paidAmount && table.paidAmount > 0 
-                    ? `$${formatCurrency(table.paidAmount)}`
-                    : `$${formatCurrency(table.orderTotal || 0)}`
-                  }
-                </Text>
+                <View style={styles.tableTotalInfo}>
+                  <Text style={[styles.orderTotal, { color: config.textColor }]}>
+                    ${formatCurrency(table.orderTotal || 0)}
+                  </Text>
+                  {table.paidAmount && table.paidAmount > 0 && (
+                    <Text style={[styles.paidAmount, { color: config.textColor }]}>
+                      Pagado: ${formatCurrency(table.paidAmount)}
+                    </Text>
+                  )}
+                </View>
               )}
             </View>
 
@@ -1115,22 +1186,35 @@ export default function TableManagement() {
         }}
         title="Procesar Pago"
       >
-        <View style={styles.modalContent}>
+        <View style={styles.paymentModalContent}>
           {selectedTable && (
             <>
-              <Text style={styles.modalTitle}>Mesa {selectedTable.number}</Text>
-                              <Text style={styles.modalSubtitle}>
-                  Total: ${formatCurrency(selectedTable.orderTotal || 0)}
+              <View style={styles.paymentInfo}>
+                <Text style={styles.modalTitle}>Mesa {selectedTable.number}</Text>
+                
+                {/* Información del total */}
+                <Text style={styles.paymentInfoText}>
+                  <Text style={styles.paymentLabel}>Total de la cuenta:</Text> ${formatCurrency(selectedTable.orderTotal || 0)}
                 </Text>
+                
+                {/* Mostrar información de pagos previos solo si hay pagos */}
                 {selectedTable.paidAmount && selectedTable.paidAmount > 0 && (
-                  <Text style={styles.modalSubtitle}>
-                    Pagado: ${formatCurrency(selectedTable.paidAmount)}
-                  </Text>
+                  <>
+                    <Text style={styles.paymentInfoText}>
+                      <Text style={styles.paymentLabel}>Ya pagado:</Text> ${formatCurrency(selectedTable.paidAmount)}
+                    </Text>
+                    <Text style={[styles.paymentInfoText, styles.remainingAmount]}>
+                      <Text style={styles.paymentLabel}>Falta pagar:</Text> ${formatCurrency((selectedTable.orderTotal || 0) - selectedTable.paidAmount)}
+                    </Text>
+                  </>
                 )}
+              </View>
 
-              <View style={styles.paymentButtonsContainer}>
+              <View style={styles.paymentOptions}>
+                <Text style={styles.paymentOptionsTitle}>Selecciona el tipo de pago:</Text>
+                
                 <TouchableOpacity
-                  style={styles.paymentButton}
+                  style={styles.fullPaymentButton}
                   onPress={handleFullPayment}
                 >
                   <Ionicons name="card" size={20} color="#ffffff" style={styles.buttonIcon} />
@@ -1148,9 +1232,10 @@ export default function TableManagement() {
 
               {showPartialPaymentInput && (
                 <View style={styles.partialPaymentSection}>
+                  <Text style={styles.partialPaymentLabel}>Ingresa el monto a pagar:</Text>
                   <TextInput
                     style={styles.paymentInput}
-                    placeholder="Ingresa el monto"
+                    placeholder="0.00"
                     value={paymentAmount}
                     onChangeText={setPaymentAmount}
                     keyboardType="numeric"
@@ -1159,7 +1244,7 @@ export default function TableManagement() {
                     style={styles.payButton}
                     onPress={handlePartialPayment}
                   >
-                    <Text style={styles.payButtonText}>Pagar</Text>
+                    <Text style={styles.payButtonText}>Confirmar Pago</Text>
                   </TouchableOpacity>
                 </View>
               )}
@@ -1330,7 +1415,7 @@ const styles = StyleSheet.create({
   tableCard: {
     flex: 1,
     margin: 4,
-    height: isTablet ? 100 : 80,
+    height: isTablet ? 120 : 100,
   },
   tableCardInner: {
     borderRadius: 12,
@@ -1359,10 +1444,11 @@ const styles = StyleSheet.create({
     padding: isTablet ? 16 : 12,
     height: '100%',
     justifyContent: 'space-between',
+    paddingVertical: isTablet ? 12 : 8,
   },
   tableHeader: {
     alignItems: 'center',
-    marginBottom: 4,
+    marginBottom: 8,
   },
   tableNumber: {
     fontSize: isTablet ? 18 : 16,
@@ -1380,17 +1466,24 @@ const styles = StyleSheet.create({
     marginBottom: 4,
     flex: 1,
     justifyContent: 'center',
+    gap: 6,
   },
   tableInfoText: {
     fontSize: isTablet ? 12 : 10,
     marginBottom: 2,
     textAlign: 'center',
+    lineHeight: 16,
   },
   orderTotal: {
     fontSize: isTablet ? 14 : 12,
     fontWeight: '600',
     marginTop: 4,
     textAlign: 'center',
+  },
+  tableTotalInfo: {
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 2,
   },
   paidAmount: {
     color: '#10b981',
@@ -1508,10 +1601,13 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   paymentModalContent: {
-    gap: 16,
+    gap: 20,
+    paddingHorizontal: 8,
   },
   paymentInfo: {
-    gap: 4,
+    gap: 8,
+    alignItems: 'center',
+    marginBottom: 8,
   },
   paymentInfoText: {
     fontSize: isTablet ? 16 : 14,
@@ -1520,8 +1616,13 @@ const styles = StyleSheet.create({
   paymentLabel: {
     fontWeight: '600',
   },
+  remainingAmount: {
+    color: '#dc2626',
+    fontWeight: '600',
+  },
   paymentOptions: {
-    gap: 12,
+    gap: 16,
+    alignItems: 'center',
   },
   paymentOptionsTitle: {
     fontSize: isTablet ? 18 : 16,
@@ -1531,14 +1632,21 @@ const styles = StyleSheet.create({
   },
 
   fullPaymentButton: {
-    paddingVertical: 12,
-    minHeight: 48,
-    width: '70%',
-    alignSelf: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    minHeight: 52,
+    width: '100%',
+    borderRadius: 8,
+    backgroundColor: '#3b82f6',
+    borderWidth: 1,
+    borderColor: '#3b82f6',
   },
   partialPaymentSection: {
-    gap: 8,
+    gap: 12,
     alignItems: 'center',
+    marginTop: 8,
   },
   partialPaymentLabel: {
     fontSize: isTablet ? 16 : 14,
@@ -1550,13 +1658,14 @@ const styles = StyleSheet.create({
     fontSize: isTablet ? 16 : 14,
     color: '#111827',
     paddingVertical: 12,
-    paddingHorizontal: 12,
+    paddingHorizontal: 16,
     borderWidth: 1,
     borderColor: '#d1d5db',
     borderRadius: 8,
     backgroundColor: '#ffffff',
     width: '100%',
     textAlign: 'center',
+    minHeight: 48,
   },
   modalTitle: {
     fontSize: isTablet ? 20 : 18,
@@ -1593,24 +1702,7 @@ const styles = StyleSheet.create({
     width: '100%',
     alignItems: 'center',
   },
-  paymentButtonsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    marginTop: 16,
-    gap: 12,
-  },
-  paymentButton: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 12,
-    minHeight: 48,
-    borderRadius: 8,
-    backgroundColor: '#3b82f6',
-    borderWidth: 1,
-    borderColor: '#3b82f6',
-  },
+
   paymentButtonText: {
     color: '#ffffff',
     fontSize: isTablet ? 16 : 14,
@@ -1618,12 +1710,12 @@ const styles = StyleSheet.create({
     marginLeft: 8,
   },
   partialPaymentButton: {
-    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 12,
-    minHeight: 48,
+    paddingVertical: 14,
+    minHeight: 52,
+    width: '100%',
     borderRadius: 8,
     backgroundColor: '#ffffff',
     borderWidth: 1,
@@ -1640,9 +1732,8 @@ const styles = StyleSheet.create({
   },
   payButton: {
     width: '100%',
-    alignSelf: 'center',
-    paddingVertical: 12,
-    minHeight: 48,
+    paddingVertical: 14,
+    minHeight: 52,
     borderRadius: 8,
     backgroundColor: '#3b82f6',
     borderWidth: 1,

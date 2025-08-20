@@ -30,7 +30,7 @@ const Modal: React.FC<ModalProps> = ({ visible, onClose, title, children }) => {
           activeOpacity={1}
           onPress={handleModalPress}
         >
-          {title && title.trim() !== "" && (
+          {title && (
             <View style={styles.header}>
               <View style={styles.closeButtonPlaceholder} />
               <Text style={styles.title}>{title}</Text>
