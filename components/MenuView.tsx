@@ -282,8 +282,8 @@ export const MenuView: React.FC<MenuViewProps> = ({
   const renderCurrentOrderItem = (item: any, index: number) => {
     const isPending = item.status === 'pending';
     const isProcessing = item.status === 'processing';
-    const statusColor = item.status === 'pending' ? '#3b82f6' : 
-                       item.status === 'processing' ? '#f59e0b' : 
+    const statusColor = item.status === 'pending' ? '#f59e0b' : 
+                       item.status === 'processing' ? '#3b82f6' : 
                        item.status === 'completed' ? '#10b981' : '#6b7280';
     
     const statusText = item.status === 'pending' ? 'Pendiente' :
