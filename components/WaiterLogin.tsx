@@ -235,4 +235,4 @@ const styles = StyleSheet.create({
     fontSize: isTablet ? 18 : 10,
     color: '#9ca3af',
   },
-}); 
+});

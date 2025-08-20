@@ -124,4 +124,4 @@ export const useWaiterAuth = (): WaiterAuthContextType => {
     throw new Error('useWaiterAuth must be used within a WaiterAuthProvider');
   }
   return context;
-}; 
+};

@@ -1357,4 +1357,4 @@ const styles = StyleSheet.create({
     shadowRadius: 2,
     elevation: 3,
   },
-}); 
+});

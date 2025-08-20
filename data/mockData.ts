@@ -106,4 +106,4 @@ export const alertConfig = {
     label: "Solicita asistencia",
     priority: "high" as const,
   },
-}; 
+};

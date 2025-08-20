@@ -153,4 +153,4 @@ class WaiterAuthService {
   }
 }
 
-export const waiterAuthService = new WaiterAuthService(); 
+export const waiterAuthService = new WaiterAuthService();

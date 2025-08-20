@@ -45,4 +45,4 @@ export const tableService = {
       updatedAt: new Date(data.updatedAt)
     };
   }
-}; 
+};

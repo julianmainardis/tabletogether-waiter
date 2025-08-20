@@ -492,4 +492,4 @@ class AlertsService {
   }
 }
 
-export const alertsService = new AlertsService(); 
+export const alertsService = new AlertsService();

@@ -71,4 +71,4 @@ export const productService = {
       throw error;
     }
   }
-}; 
+};
