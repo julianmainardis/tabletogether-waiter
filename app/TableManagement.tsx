@@ -737,7 +737,11 @@ export default function TableManagement() {
       </View>
       
       {showAlerts && (
-        <ScrollView style={styles.alertsList} showsVerticalScrollIndicator={false}>
+        <ScrollView 
+          style={styles.alertsList} 
+          showsVerticalScrollIndicator={false}
+          nestedScrollEnabled={true}
+        >
           {activeAlerts.length === 0 ? (
             <Text style={styles.noAlertsText}>No hay alertas activas</Text>
           ) : (
@@ -1197,6 +1201,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: isTablet ? 0 : 1,
     borderColor: '#e5e7eb',
     padding: isTablet ? 16 : 12,
+    paddingBottom: isTablet ? 32 : 24,
   },
   rightPanel: {
     flex: 1,
@@ -1248,7 +1253,7 @@ const styles = StyleSheet.create({
     padding: 4,
   },
   alertsList: {
-    maxHeight: isTablet ? 300 : 200,
+    maxHeight: isTablet ? screenHeight * 0.85 : screenHeight * 0.8,
   },
   noAlertsText: {
     textAlign: 'center',
