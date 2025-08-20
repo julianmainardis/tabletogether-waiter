@@ -18,6 +18,14 @@ export interface UpdateTableStatusResponse {
   updatedAt: Date;
 }
 
+export interface TableSession {
+  id: string;
+  tableId: string;
+  startedAt: Date;
+  endedAt?: Date;
+  status: 'active' | 'ended';
+}
+
 export const tableService = {
   async updateTableStatus(tableId: string, updateData: UpdateTableStatusRequest): Promise<UpdateTableStatusResponse> {
     const auth = waiterAuthService.getCurrentAuth();
@@ -44,5 +52,32 @@ export const tableService = {
       ...data,
       updatedAt: new Date(data.updatedAt)
     };
+  },
+
+  async getTableSessions(tableId: string): Promise<TableSession[]> {
+    const auth = waiterAuthService.getCurrentAuth();
+    if (!auth) {
+      throw new Error('No hay sesión activa');
+    }
+
+    const response = await fetch(`${API_BASE_URL}/admin/tables/${tableId}/sessions`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${auth.token}`,
+      },
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.message || 'Error al obtener las sesiones de la mesa');
+    }
+
+    const data = await response.json();
+    return data.map((session: any) => ({
+      ...session,
+      startedAt: new Date(session.startedAt),
+      endedAt: session.endedAt ? new Date(session.endedAt) : undefined
+    }));
   }
 }; 

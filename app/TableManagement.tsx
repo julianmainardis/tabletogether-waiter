@@ -58,8 +58,11 @@ export default function TableManagement() {
   const [animatingTables, setAnimatingTables] = useState<Set<string>>(new Set());
   const [showPartialPaymentInput, setShowPartialPaymentInput] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [timeUpdate, setTimeUpdate] = useState(0);
 
  
+
+
 
   // Convertir datos reales del backend al formato de la aplicación
   useEffect(() => {
@@ -71,7 +74,7 @@ export default function TableManagement() {
           number: realTable.number,
           status: realTable.status,
           capacity: realTable.capacity,
-          occupiedTime: realTable.lastActivity,
+          occupiedTime: realTable.createdAt,
           waiter: realTable.waiter,
           total: realTable.orderTotal || 0,
           orderTotal: realTable.orderTotal || 0, // Asegurar que siempre sea un número
@@ -90,6 +93,15 @@ export default function TableManagement() {
       setTables(convertedTables);
     }
   }, [realTables, user]);
+
+  // Actualizar tiempo cada minuto
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setTimeUpdate(prev => prev + 1);
+    }, 60000); // Actualizar cada minuto
+
+    return () => clearInterval(interval);
+  }, []);
 
   // Configurar socket y listeners
   useEffect(() => {
@@ -370,7 +382,11 @@ export default function TableManagement() {
     }
   };
 
-  const getTimeAgo = (timestamp: Date) => {
+  const getTimeAgo = (timestamp: Date | undefined) => {
+    if (!timestamp || !(timestamp instanceof Date) || isNaN(timestamp.getTime())) {
+      return 'Reciente';
+    }
+    
     const now = new Date();
     const diffInMinutes = Math.floor((now.getTime() - timestamp.getTime()) / (1000 * 60));
     
@@ -386,6 +402,19 @@ export default function TableManagement() {
     
     const days = Math.floor(hours / 24);
     return `${days}d`;
+  };
+
+  const getSessionTime = (timeOccupied?: string) => {
+    // El backend ya calcula timeOccupied correctamente usando started_at
+    // Solo necesitamos retornarlo tal como viene
+    return timeOccupied || null;
+  };
+
+  // Función que incluye timeUpdate para forzar la actualización
+  const getSessionTimeWithUpdate = (timeOccupied?: string) => {
+    // Usar timeUpdate para forzar la recalculación
+    timeUpdate; // Esto fuerza la recalculación cuando cambia
+    return getSessionTime(timeOccupied);
   };
 
   const handleTablePress = (table: Table) => {
@@ -626,9 +655,9 @@ export default function TableManagement() {
             </View>
 
             <View style={styles.tableInfo}>
-              {table.timeOccupied ? (
+              {table.timeOccupied && table.sessionId ? (
                 <Text style={[styles.tableInfoText, { color: config.textColor }]}>
-                  Tiempo: {table.timeOccupied}
+                  Tiempo: {getSessionTimeWithUpdate(table.timeOccupied)}
                 </Text>
               ) : null}
               
