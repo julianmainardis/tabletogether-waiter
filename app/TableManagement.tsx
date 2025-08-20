@@ -526,29 +526,86 @@ export default function TableManagement() {
     }
   };
 
-  const handleConfirmOrder = (items: any[]) => {
+  const handleConfirmOrder = async (items: any[]) => {
     if (selectedTableForMenu) {
-      setTableOrders(prev => ({
-        ...prev,
-        [selectedTableForMenu]: items
-      }));
+      try {
+        // Si estamos modificando un pedido, enviar los productos agregados al backend
+        if (isModifyingOrder) {
+          const currentTable = tables.find(t => t.id === selectedTableForMenu);
+          if (!currentTable?.realId) {
+            Alert.alert('Error', 'No se pudo identificar la mesa');
+            return;
+          }
 
-      const total = items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-      
-      setTables(prev => prev.map(table => 
-        table.id === selectedTableForMenu 
-          ? { ...table, orderTotal: Math.round(total * 100) / 100 }
-          : table
-      ));
+          // Obtener los productos que están en el pedido actual
+          const currentOrderItems = tableOrders[selectedTableForMenu] || [];
+          
+          // Filtrar solo los productos que están en estado 'pending' (nuevos)
+          const newItems = items.filter(item => 
+            !currentOrderItems.some(currentItem => 
+              currentItem.id === item.id && currentItem.status === 'pending'
+            )
+          );
 
-      // Recargar el pedido actual después de confirmar
-      if (isModifyingOrder) {
-        loadCurrentOrder(selectedTableForMenu);
+          // Enviar todos los productos nuevos en una sola orden al backend
+          if (newItems.length > 0) {
+            try {
+              // Crear las modificaciones para todos los productos
+              const modifications = newItems.map(item => ({
+                action: 'add' as const,
+                productId: String(item.id),
+                quantity: item.quantity,
+                customizations: Array.isArray(item.customizations) 
+                  ? item.customizations.map((c: any) => typeof c === 'string' ? c : String(c))
+                  : (item.customizations ? [String(item.customizations)] : [])
+              }));
+
+              // Enviar todos los productos en una sola llamada
+              await orderService.modifyOrder(currentTable.realId, {
+                orderId: '', // Para 'add' se creará una nueva orden
+                modifications: modifications
+              });
+
+              Alert.alert('Éxito', `${newItems.length} producto(s) agregado(s) al pedido`);
+            } catch (error: any) {
+              console.error('Error agregando productos:', error);
+              Alert.alert('Error', `No se pudieron agregar los productos: ${error.message}`);
+              return; // Salir si hay error
+            }
+          }
+        }
+
+        setTableOrders(prev => ({
+          ...prev,
+          [selectedTableForMenu]: items
+        }));
+
+        // Recargar el pedido actual después de confirmar para obtener el total real del backend
+        if (isModifyingOrder) {
+          await loadCurrentOrder(selectedTableForMenu);
+          
+          // Actualizar el total de la mesa con los datos reales del backend
+          setTimeout(async () => {
+            await refreshTables();
+          }, 500);
+        } else {
+          // Para pedidos nuevos, calcular el total local
+          const total = items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+          setTables(prev => prev.map(table => 
+            table.id === selectedTableForMenu 
+              ? { ...table, orderTotal: Math.round(total * 100) / 100 }
+              : table
+          ));
+        }
+
+        setCurrentView('tables');
+        setSelectedTableForMenu(null);
+        setIsModifyingOrder(false);
+        
+      } catch (error: any) {
+        console.error('Error confirmando pedido:', error);
+        Alert.alert('Error', 'No se pudo confirmar el pedido');
       }
-
-      setCurrentView('tables');
-      setSelectedTableForMenu(null);
-      setIsModifyingOrder(false);
     }
   };
 

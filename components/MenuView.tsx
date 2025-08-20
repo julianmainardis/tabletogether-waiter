@@ -75,6 +75,9 @@ export const MenuView: React.FC<MenuViewProps> = ({
     }
     return {};
   });
+  
+  // Almacenar customizations por productId
+  const [selectedCustomizations, setSelectedCustomizations] = useState<Record<string, string[]>>({});
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [showProductDetail, setShowProductDetail] = useState(false);
@@ -142,6 +145,27 @@ export const MenuView: React.FC<MenuViewProps> = ({
       delete newItems[itemId];
       return newItems;
     });
+    
+    // También limpiar customizations
+    setSelectedCustomizations(prev => {
+      const newCustomizations = { ...prev };
+      delete newCustomizations[itemId];
+      return newCustomizations;
+    });
+  };
+  
+  const validateSelectedItems = () => {
+    const items = getSelectedItemsList();
+    for (const item of items) {
+      const product = products.find(p => p.id === item.id);
+      if (product && product.customizations && product.customizations.length > 0) {
+        const hasRequiredCustomizations = product.customizations.some(c => c.is_required);
+        if (hasRequiredCustomizations && (!item.customizations || item.customizations.length === 0)) {
+          return { valid: false, message: `"${product.name}" requiere personalización` };
+        }
+      }
+    }
+    return { valid: true, message: '' };
   };
 
   const handleProductPress = (product: Product) => {
@@ -152,10 +176,30 @@ export const MenuView: React.FC<MenuViewProps> = ({
 
   const handleAddToOrder = (productId: string, quantity: number, customizations: string[]) => {
     console.log('📦 Adding to order:', productId, quantity, customizations);
+    
+    // Buscar el producto para verificar si tiene customizations obligatorias
+    const product = products.find(p => p.id === productId);
+    if (product && product.customizations && product.customizations.length > 0) {
+      const hasRequiredCustomizations = product.customizations.some(c => c.is_required);
+      
+      if (hasRequiredCustomizations && customizations.length === 0) {
+        Alert.alert('Error', 'Este producto requiere personalización. Por favor selecciona las opciones requeridas.');
+        return;
+      }
+    }
+    
     setSelectedItems(prev => ({
       ...prev,
       [productId]: (prev[productId] || 0) + quantity,
     }));
+    
+    // Almacenar customizations si las hay
+    if (customizations.length > 0) {
+      setSelectedCustomizations(prev => ({
+        ...prev,
+        [productId]: customizations,
+      }));
+    }
   };
 
   const getTotalPrice = () => {
@@ -173,12 +217,18 @@ export const MenuView: React.FC<MenuViewProps> = ({
       return {
         ...item,
         quantity,
+        customizations: selectedCustomizations[itemId] || [],
       };
     }).filter((item): item is NonNullable<typeof item> => item !== null);
   };
 
   const renderMenuItem = (product: Product) => {
     const quantity = selectedItems[product.id] || 0;
+    
+    // Verificar si el producto tiene customizations obligatorias
+    const hasRequiredCustomizations = product.customizations && 
+      product.customizations.length > 0 && 
+      product.customizations.some(c => c.is_required);
     
     return (
       <TouchableOpacity
@@ -191,13 +241,23 @@ export const MenuView: React.FC<MenuViewProps> = ({
           <CardContent style={styles.menuItemContent}>
             <View style={styles.menuItemHeader}>
               <View style={styles.menuItemInfo}>
-                <Text style={styles.menuItemName}>{product.name}</Text>
+                <View style={styles.productNameContainer}>
+                  <Text style={styles.menuItemName}>{product.name}</Text>
+                  {hasRequiredCustomizations && (
+                    <View style={styles.requiredBadge}>
+                      <Ionicons name="settings" size={12} color="#f59e0b" />
+                    </View>
+                  )}
+                </View>
                 {product.description && (
                   <Text style={styles.menuItemDescription} numberOfLines={2}>
                     {product.description}
                   </Text>
                 )}
                 <Text style={styles.menuItemPrice}>${formatCurrency(product.price)}</Text>
+                {hasRequiredCustomizations && (
+                  <Text style={styles.customizationHint}>Toca para personalizar</Text>
+                )}
               </View>
               <View style={styles.quantityControls}>
                 {quantity > 0 && (
@@ -211,12 +271,6 @@ export const MenuView: React.FC<MenuViewProps> = ({
                 {quantity > 0 && (
                   <Text style={styles.quantityText}>{quantity}</Text>
                 )}
-                <TouchableOpacity
-                  onPress={() => addItem(product.id)}
-                  style={styles.quantityButton}
-                >
-                  <Ionicons name="add" size={isTablet ? 24 : 20} color="#10b981" />
-                </TouchableOpacity>
               </View>
             </View>
           </CardContent>
@@ -450,8 +504,14 @@ export const MenuView: React.FC<MenuViewProps> = ({
           <Button
             title={isModifying ? "Confirmar modificación" : "Confirmar pedido"}
             onPress={() => {
+              const validation = validateSelectedItems();
+              if (!validation.valid) {
+                Alert.alert('Error', validation.message);
+                return;
+              }
+              
               onConfirmOrder(getSelectedItemsList());
-              // Llamar a onRefresh para actualizar la vista principal
+              // Llamar a onRefresh para actualizar la vista principal (igual que cuando se elimina)
               if (onRefresh) {
                 onRefresh();
               }
@@ -792,5 +852,24 @@ const styles = StyleSheet.create({
   currentOrderItemWrapper: {
     width: '48%',
     marginBottom: 6,
+  },
+  productNameContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 2,
+  },
+  requiredBadge: {
+    backgroundColor: '#fef3c7',
+    borderRadius: 8,
+    padding: 2,
+    marginLeft: 6,
+    borderWidth: 1,
+    borderColor: '#f59e0b',
+  },
+  customizationHint: {
+    fontSize: isTablet ? 10 : 9,
+    color: '#f59e0b',
+    fontStyle: 'italic',
+    marginTop: 2,
   },
 }); 

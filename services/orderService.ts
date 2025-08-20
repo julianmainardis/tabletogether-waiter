@@ -202,9 +202,9 @@ export const orderService = {
     });
   },
 
-  async addItem(tableId: string, orderId: string, productId: string, quantity: number, customizations?: string[], notes?: string): Promise<ModifyOrderResponse> {
+  async addItem(tableId: string, productId: string, quantity: number, customizations?: string[], notes?: string): Promise<ModifyOrderResponse> {
     return this.modifyOrder(tableId, {
-      orderId,
+      orderId: '', // Para 'add' se creará una nueva orden
       modifications: [{
         action: 'add',
         productId,
