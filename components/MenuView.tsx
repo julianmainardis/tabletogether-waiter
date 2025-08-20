@@ -21,7 +21,6 @@ import { orderService } from '../services/orderService';
 interface MenuViewProps {
   tableId: number;
   diners: number;
-  isModifying?: boolean;
   currentOrder?: any[];
   loadingCurrentOrder?: boolean;
   onBack: () => void;
@@ -52,7 +51,6 @@ const categoryIcons: Record<string, string> = {
 export const MenuView: React.FC<MenuViewProps> = ({
   tableId,
   diners,
-  isModifying = false,
   currentOrder = [],
   loadingCurrentOrder = false,
   onBack,
@@ -64,7 +62,7 @@ export const MenuView: React.FC<MenuViewProps> = ({
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedItems, setSelectedItems] = useState<Record<string, number>>(() => {
-    if (isModifying && currentOrder.length > 0) {
+    if (currentOrder.length > 0) {
       console.log('Modificando pedido actual:', currentOrder);
       const initialItems: Record<string, number> = {};
       currentOrder.forEach(item => {
@@ -331,7 +329,7 @@ export const MenuView: React.FC<MenuViewProps> = ({
             </Text>
           </View>
         </View>
-        {isPending && isModifying && (
+        {isPending && (
           <TouchableOpacity
             onPress={() => {
               Alert.alert(
@@ -366,7 +364,7 @@ export const MenuView: React.FC<MenuViewProps> = ({
           </TouchableOpacity>
           <View style={styles.headerInfo}>
             <Text style={styles.headerTitle}>
-              {isModifying ? 'Modificar Pedido' : 'Menú'} - Mesa {tableId}
+              Modificar Pedido - Mesa {tableId}
             </Text>
             <Text style={styles.headerSubtitle}>{diners} comensales</Text>
           </View>
@@ -388,40 +386,38 @@ export const MenuView: React.FC<MenuViewProps> = ({
         </TouchableOpacity>
         <View style={styles.headerInfo}>
           <Text style={styles.headerTitle}>
-            {isModifying ? 'Modificar Pedido' : 'Menú'} - Mesa {tableId}
+            Modificar Pedido - Mesa {tableId}
           </Text>
           <Text style={styles.headerSubtitle}>{diners} comensales</Text>
         </View>
       </View>
 
-      {isModifying && (
-        <View style={styles.currentOrderSection}>
-          <Text style={styles.currentOrderTitle}>Pedido Actual</Text>
-          {loadingCurrentOrder ? (
-            <View style={styles.currentOrderLoadingContainer}>
-              <Text style={styles.currentOrderLoadingText}>Cargando pedido actual...</Text>
-            </View>
+      <View style={styles.currentOrderSection}>
+        <Text style={styles.currentOrderTitle}>Pedido Actual</Text>
+        {loadingCurrentOrder ? (
+          <View style={styles.currentOrderLoadingContainer}>
+            <Text style={styles.currentOrderLoadingText}>Cargando pedido actual...</Text>
+          </View>
+        ) : (
+          currentOrder.length > 0 ? (
+            <ScrollView 
+              style={styles.currentOrderScrollView}
+              showsVerticalScrollIndicator={false}
+              nestedScrollEnabled={true}
+            >
+              <View style={styles.currentOrderGrid}>
+                {currentOrder.map((item, index) => (
+                  <View key={`${item.id}-${item.status}-${index}`} style={styles.currentOrderItemWrapper}>
+                    {renderCurrentOrderItem(item, index)}
+                  </View>
+                ))}
+              </View>
+            </ScrollView>
           ) : (
-            currentOrder.length > 0 ? (
-              <ScrollView 
-                style={styles.currentOrderScrollView}
-                showsVerticalScrollIndicator={false}
-                nestedScrollEnabled={true}
-              >
-                <View style={styles.currentOrderGrid}>
-                  {currentOrder.map((item, index) => (
-                    <View key={`${item.id}-${item.status}-${index}`} style={styles.currentOrderItemWrapper}>
-                      {renderCurrentOrderItem(item, index)}
-                    </View>
-                  ))}
-                </View>
-              </ScrollView>
-            ) : (
-              <Text style={styles.noOrderText}>No hay pedido actual</Text>
-            )
-          )}
-        </View>
-      )}
+            <Text style={styles.noOrderText}>No hay pedido actual</Text>
+          )
+        )}
+      </View>
 
       <View style={styles.categoriesSection}>
         <ScrollView 
@@ -502,7 +498,7 @@ export const MenuView: React.FC<MenuViewProps> = ({
           </ScrollView>
           
           <Button
-            title={isModifying ? "Confirmar modificación" : "Confirmar pedido"}
+            title="Confirmar modificación"
             onPress={() => {
               const validation = validateSelectedItems();
               if (!validation.valid) {
