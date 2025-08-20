@@ -50,7 +50,7 @@ export default function TableManagement() {
   const [validationError, setValidationError] = useState('');
   const [currentView, setCurrentView] = useState<ViewType>('tables');
   const [selectedTableForMenu, setSelectedTableForMenu] = useState<number | null>(null);
-  const [isModifyingOrder, setIsModifyingOrder] = useState(false);
+
   const [tableOrders, setTableOrders] = useState<Record<number, any[]>>({});
   const [tableDiners, setTableDiners] = useState<Record<number, number>>({});
   const [currentOrderData, setCurrentOrderData] = useState<TableOrdersResponse | null>(null);
@@ -58,8 +58,11 @@ export default function TableManagement() {
   const [animatingTables, setAnimatingTables] = useState<Set<string>>(new Set());
   const [showPartialPaymentInput, setShowPartialPaymentInput] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [timeUpdate, setTimeUpdate] = useState(0);
 
  
+
+
 
   // Convertir datos reales del backend al formato de la aplicación
   useEffect(() => {
@@ -71,7 +74,7 @@ export default function TableManagement() {
           number: realTable.number,
           status: realTable.status,
           capacity: realTable.capacity,
-          occupiedTime: realTable.lastActivity,
+          occupiedTime: realTable.createdAt,
           waiter: realTable.waiter,
           total: realTable.orderTotal || 0,
           orderTotal: realTable.orderTotal || 0, // Asegurar que siempre sea un número
@@ -93,6 +96,15 @@ export default function TableManagement() {
     }
   }, [realTables, user]);
 
+  // Actualizar tiempo cada minuto
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setTimeUpdate(prev => prev + 1);
+    }, 60000); // Actualizar cada minuto
+
+    return () => clearInterval(interval);
+  }, []);
+
   // Configurar socket y listeners
   useEffect(() => {
     // Conectar socket
@@ -103,7 +115,7 @@ export default function TableManagement() {
       refreshTables();
       
       // Si estamos en la vista de modificar pedido, recargar el pedido actual
-      if (isModifyingOrder && selectedTableForMenu) {
+      if (selectedTableForMenu) {
         loadCurrentOrder(selectedTableForMenu);
       }
     });
@@ -400,7 +412,11 @@ export default function TableManagement() {
     }
   };
 
-  const getTimeAgo = (timestamp: Date) => {
+  const getTimeAgo = (timestamp: Date | undefined) => {
+    if (!timestamp || !(timestamp instanceof Date) || isNaN(timestamp.getTime())) {
+      return 'Reciente';
+    }
+    
     const now = new Date();
     const diffInMinutes = Math.floor((now.getTime() - timestamp.getTime()) / (1000 * 60));
     
@@ -416,6 +432,19 @@ export default function TableManagement() {
     
     const days = Math.floor(hours / 24);
     return `${days}d`;
+  };
+
+  const getSessionTime = (timeOccupied?: string) => {
+    // El backend ya calcula timeOccupied correctamente usando started_at
+    // Solo necesitamos retornarlo tal como viene
+    return timeOccupied || null;
+  };
+
+  // Función que incluye timeUpdate para forzar la actualización
+  const getSessionTimeWithUpdate = (timeOccupied?: string) => {
+    // Usar timeUpdate para forzar la recalculación
+    timeUpdate; // Esto fuerza la recalculación cuando cambia
+    return getSessionTime(timeOccupied);
   };
 
   const handleTablePress = (table: Table) => {
@@ -448,11 +477,6 @@ export default function TableManagement() {
       
       // Refrescar los datos del backend
       await refreshTables();
-      
-      // Redirigir al menú después de asignar la mesa
-      setSelectedTableForMenu(tableId);
-      setIsModifyingOrder(false);
-      setCurrentView('menu');
 
     } catch (error) {
       console.error('Error assigning table:', error);
@@ -460,15 +484,10 @@ export default function TableManagement() {
     }
   };
 
-  const handleNewOrder = (tableId: number) => {
-    setSelectedTableForMenu(tableId);
-    setIsModifyingOrder(false);
-    setCurrentView('menu');
-  };
+
 
   const handleModifyOrder = (tableId: number) => {
     setSelectedTableForMenu(tableId);
-    setIsModifyingOrder(true);
     setCurrentView('menu');
     loadCurrentOrder(tableId);
   };
@@ -596,49 +615,46 @@ export default function TableManagement() {
   const handleConfirmOrder = async (items: any[]) => {
     if (selectedTableForMenu) {
       try {
-        // Si estamos modificando un pedido, enviar los productos agregados al backend
-        if (isModifyingOrder) {
-          const currentTable = tables.find(t => t.id === selectedTableForMenu);
-          if (!currentTable?.realId) {
-            Alert.alert('Error', 'No se pudo identificar la mesa');
+        const currentTable = tables.find(t => t.id === selectedTableForMenu);
+        if (!currentTable?.realId) {
+          Alert.alert('Error', 'No se pudo identificar la mesa');
+          return;
+        }
+
+        // Obtener los productos que están en el pedido actual
+        const currentOrderItems = tableOrders[selectedTableForMenu] || [];
+        
+        // Filtrar solo los productos que están en estado 'pending' (nuevos)
+        const newItems = items.filter(item => 
+          !currentOrderItems.some(currentItem => 
+            currentItem.id === item.id && currentItem.status === 'pending'
+          )
+        );
+
+        // Enviar todos los productos nuevos en una sola orden al backend
+        if (newItems.length > 0) {
+          try {
+            // Crear las modificaciones para todos los productos
+            const modifications = newItems.map(item => ({
+              action: 'add' as const,
+              productId: String(item.id),
+              quantity: item.quantity,
+              customizations: Array.isArray(item.customizations) 
+                ? item.customizations.map((c: any) => typeof c === 'string' ? c : String(c))
+                : (item.customizations ? [String(item.customizations)] : [])
+            }));
+
+            // Enviar todos los productos en una sola llamada
+            await orderService.modifyOrder(currentTable.realId, {
+              orderId: '', // Para 'add' se creará una nueva orden
+              modifications: modifications
+            });
+
+            Alert.alert('Éxito', `${newItems.length} producto(s) agregado(s) al pedido`);
+          } catch (error: any) {
+            console.error('Error agregando productos:', error);
+            Alert.alert('Error', `No se pudieron agregar los productos: ${error.message}`);
             return;
-          }
-
-          // Obtener los productos que están en el pedido actual
-          const currentOrderItems = tableOrders[selectedTableForMenu] || [];
-          
-          // Filtrar solo los productos que están en estado 'pending' (nuevos)
-          const newItems = items.filter(item => 
-            !currentOrderItems.some(currentItem => 
-              currentItem.id === item.id && currentItem.status === 'pending'
-            )
-          );
-
-          // Enviar todos los productos nuevos en una sola orden al backend
-          if (newItems.length > 0) {
-            try {
-              // Crear las modificaciones para todos los productos
-              const modifications = newItems.map(item => ({
-                action: 'add' as const,
-                productId: String(item.id),
-                quantity: item.quantity,
-                customizations: Array.isArray(item.customizations) 
-                  ? item.customizations.map((c: any) => typeof c === 'string' ? c : String(c))
-                  : (item.customizations ? [String(item.customizations)] : [])
-              }));
-
-              // Enviar todos los productos en una sola llamada
-              await orderService.modifyOrder(currentTable.realId, {
-                orderId: '', // Para 'add' se creará una nueva orden
-                modifications: modifications
-              });
-
-              Alert.alert('Éxito', `${newItems.length} producto(s) agregado(s) al pedido`);
-            } catch (error: any) {
-              console.error('Error agregando productos:', error);
-              Alert.alert('Error', `No se pudieron agregar los productos: ${error.message}`);
-              return; // Salir si hay error
-            }
           }
         }
 
@@ -648,26 +664,15 @@ export default function TableManagement() {
         }));
 
         // Recargar el pedido actual después de confirmar para obtener el total real del backend
-        if (isModifyingOrder) {
-          await loadCurrentOrder(selectedTableForMenu);
-          
-          // Actualizar el total de la mesa con los datos reales del backend
-          setTimeout(async () => {
-            await refreshTables();
-          }, 500);
-        } else {
-          // Para pedidos nuevos, calcular el total local
-          const total = items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-          setTables(prev => prev.map(table => 
-            table.id === selectedTableForMenu 
-              ? { ...table, orderTotal: Math.round(total * 100) / 100 }
-              : table
-          ));
-        }
+        await loadCurrentOrder(selectedTableForMenu);
+        
+        // Actualizar el total de la mesa con los datos reales del backend
+        setTimeout(async () => {
+          await refreshTables();
+        }, 500);
 
         setCurrentView('tables');
         setSelectedTableForMenu(null);
-        setIsModifyingOrder(false);
         
       } catch (error: any) {
         console.error('Error confirmando pedido:', error);
@@ -717,9 +722,9 @@ export default function TableManagement() {
             </View>
 
             <View style={styles.tableInfo}>
-              {table.timeOccupied ? (
+              {table.timeOccupied && table.sessionId ? (
                 <Text style={[styles.tableInfoText, { color: config.textColor }]}>
-                  Tiempo: {table.timeOccupied}
+                  Tiempo: {getSessionTimeWithUpdate(table.timeOccupied)}
                 </Text>
               ) : null}
               
@@ -832,7 +837,11 @@ export default function TableManagement() {
       </View>
       
       {showAlerts && (
-        <ScrollView style={styles.alertsList} showsVerticalScrollIndicator={false}>
+        <ScrollView 
+          style={styles.alertsList} 
+          showsVerticalScrollIndicator={false}
+          nestedScrollEnabled={true}
+        >
           {activeAlerts.length === 0 ? (
             <Text style={styles.noAlertsText}>No hay alertas activas</Text>
           ) : (
@@ -894,14 +903,12 @@ export default function TableManagement() {
       <MenuView
         tableId={selectedTableForMenu || 0}
         diners={currentDiners || 2}
-        isModifying={isModifyingOrder}
         currentOrder={selectedTableForMenu ? (tableOrders[selectedTableForMenu] || []) : []}
         loadingCurrentOrder={loadingCurrentOrder}
         tableRealId={currentTable?.realId}
         onBack={() => {
           setCurrentView('tables');
           setSelectedTableForMenu(null);
-          setIsModifyingOrder(false);
         }}
         onConfirmOrder={handleConfirmOrder}
         onRefresh={refreshTables}
@@ -1075,16 +1082,6 @@ export default function TableManagement() {
 
               {selectedTable.status === "occupied" && (
                 <View style={styles.occupiedActions}>
-                  <Button
-                    title="Realizar pedido"
-                    onPress={() => {
-                      setShowTableModal(false);
-                      handleNewOrder(selectedTable.id);
-                    }}
-                    variant="outline"
-                    icon={<Ionicons name="add" size={16} color="#374151" />}
-                    style={styles.actionButton}
-                  />
                   <Button
                     title="Modificar pedido"
                     onPress={() => {
@@ -1318,6 +1315,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: isTablet ? 0 : 1,
     borderColor: '#e5e7eb',
     padding: isTablet ? 16 : 12,
+    paddingBottom: isTablet ? 32 : 24,
   },
   rightPanel: {
     flex: 1,
@@ -1369,7 +1367,7 @@ const styles = StyleSheet.create({
     padding: 4,
   },
   alertsList: {
-    maxHeight: isTablet ? 300 : 200,
+    maxHeight: isTablet ? screenHeight * 0.85 : screenHeight * 0.8,
   },
   noAlertsText: {
     textAlign: 'center',
