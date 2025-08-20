@@ -16,6 +16,7 @@ import { Card, CardContent } from './ui/card';
 import { Badge } from './ui/badge';
 import { ProductDetailDialog } from './ProductDetailDialog';
 import { productService, Product, Category } from '../services/productService';
+import { orderService } from '../services/orderService';
 
 interface MenuViewProps {
   tableId: number;
@@ -25,12 +26,12 @@ interface MenuViewProps {
   loadingCurrentOrder?: boolean;
   onBack: () => void;
   onConfirmOrder: (items: any[]) => void;
+  tableRealId?: string;
 }
 
 const { width: screenWidth } = Dimensions.get('window');
 const isTablet = screenWidth >= 768;
 
-// Función para formatear moneda en formato español
 const formatCurrency = (amount: number): string => {
   return new Intl.NumberFormat('es-ES', {
     style: 'decimal',
@@ -39,7 +40,6 @@ const formatCurrency = (amount: number): string => {
   }).format(amount);
 };
 
-// Definir iconos para cada categoría
 const categoryIcons: Record<string, string> = {
   'all': 'restaurant',
   'Entrantes': 'wine',
@@ -56,17 +56,18 @@ export const MenuView: React.FC<MenuViewProps> = ({
   loadingCurrentOrder = false,
   onBack,
   onConfirmOrder,
+  tableRealId,
 }) => {
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedItems, setSelectedItems] = useState<Record<string, number>>(() => {
-    // Si estamos modificando, inicializar con el pedido actual
     if (isModifying && currentOrder.length > 0) {
       console.log('Modificando pedido actual:', currentOrder);
       const initialItems: Record<string, number> = {};
       currentOrder.forEach(item => {
-        initialItems[item.id] = item.quantity;
+        const uniqueId = `${item.id}-${item.status || 'pending'}`;
+        initialItems[uniqueId] = item.quantity;
       });
       return initialItems;
     }
@@ -76,7 +77,6 @@ export const MenuView: React.FC<MenuViewProps> = ({
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [showProductDetail, setShowProductDetail] = useState(false);
 
-  // Cargar productos y categorías
   useEffect(() => {
     const loadData = async () => {
       try {
@@ -90,7 +90,6 @@ export const MenuView: React.FC<MenuViewProps> = ({
         
         console.log('📦 Products loaded:', productsData.length);
         console.log('📂 Categories loaded:', categoriesData);
-        console.log('📂 Categories names:', categoriesData.map(cat => cat.name));
         
         setProducts(productsData);
         setCategories(categoriesData);
@@ -108,23 +107,13 @@ export const MenuView: React.FC<MenuViewProps> = ({
   }, []);
 
   const allCategories = ['all', ...categories.map(cat => cat.name)];
-  console.log('🏷️ All categories:', allCategories);
-  console.log('🔍 Selected category:', selectedCategory);
-  console.log('📦 Total products:', products.length);
-  console.log('📂 Categories from backend:', categories.map(cat => ({ id: cat.id, name: cat.name })));
-  console.log('🎯 About to render', allCategories.length, 'category buttons');
   
   const filteredProducts = selectedCategory === 'all' 
     ? products 
     : products.filter(product => {
         const productCategory = categories.find(cat => cat.id === product.category_id);
-        const matches = productCategory?.name === selectedCategory;
-        console.log(`Product ${product.name} - category_id: ${product.category_id} - category_name: ${productCategory?.name} - selected: ${selectedCategory} - matches: ${matches}`);
-        return matches;
+        return productCategory?.name === selectedCategory;
       });
-  
-  console.log('📋 Filtered products count:', filteredProducts.length);
-  console.log('📋 Filtered products:', filteredProducts.map(p => p.name));
 
   const addItem = (itemId: string) => {
     setSelectedItems(prev => ({
@@ -172,7 +161,7 @@ export const MenuView: React.FC<MenuViewProps> = ({
       const item = products.find(i => i.id === itemId);
       return total + (item?.price || 0) * quantity;
     }, 0);
-    return Math.round(total * 100) / 100; // Redondear a 2 decimales
+    return Math.round(total * 100) / 100;
   };
 
   const getSelectedItemsList = () => {
@@ -234,6 +223,78 @@ export const MenuView: React.FC<MenuViewProps> = ({
     );
   };
 
+  const renderCurrentOrderItem = (item: any, index: number) => {
+    const isPending = item.status === 'pending';
+    const isProcessing = item.status === 'processing';
+    const statusColor = item.status === 'pending' ? '#3b82f6' : 
+                       item.status === 'processing' ? '#f59e0b' : 
+                       item.status === 'completed' ? '#10b981' : '#6b7280';
+    
+    const statusText = item.status === 'pending' ? 'Pendiente' :
+                      item.status === 'processing' ? 'En preparación' :
+                      item.status === 'completed' ? 'Listo' : 'Entregado';
+
+    const handleRemoveItem = async () => {
+      try {
+        if (!tableRealId) {
+          Alert.alert('Error', 'No se puede eliminar este producto en este momento');
+          return;
+        }
+
+        // Por ahora, solo mostrar un mensaje de que la funcionalidad está en desarrollo
+        Alert.alert(
+          'Funcionalidad en desarrollo',
+          'La eliminación de productos del pedido está siendo implementada. Por favor, contacte al administrador del sistema.',
+          [{ text: 'Entendido', style: 'default' }]
+        );
+        
+        // TODO: Implementar eliminación real cuando el backend esté listo
+        // await orderService.removeItem(tableRealId, item.orderId, item.itemId, 'Eliminado por camarero');
+        
+      } catch (error: any) {
+        console.error('Error eliminando producto:', error);
+        Alert.alert('Error', error.message || 'No se pudo eliminar el producto');
+      }
+    };
+
+    return (
+      <View style={styles.currentOrderItem}>
+        <View style={styles.currentOrderItemContent}>
+          <Text style={styles.currentOrderItemText}>
+            {item.name} x{item.quantity} - ${formatCurrency(item.price * item.quantity)}
+          </Text>
+          <View style={styles.currentOrderItemStatus}>
+            <View style={[styles.statusIndicator, { backgroundColor: statusColor }]} />
+            <Text style={[styles.statusText, { color: statusColor }]}>
+              {statusText}
+            </Text>
+          </View>
+        </View>
+        {(isPending || isProcessing) && isModifying && (
+          <TouchableOpacity
+            onPress={() => {
+              Alert.alert(
+                'Eliminar producto',
+                `¿Estás seguro de que quieres eliminar "${item.name}" del pedido?`,
+                [
+                  { text: 'Cancelar', style: 'cancel' },
+                  { 
+                    text: 'Eliminar', 
+                    style: 'destructive',
+                    onPress: handleRemoveItem
+                  }
+                ]
+              );
+            }}
+            style={styles.removeCurrentOrderButton}
+          >
+            <Ionicons name="trash-outline" size={18} color="#ef4444" />
+          </TouchableOpacity>
+        )}
+      </View>
+    );
+  };
+
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
@@ -272,7 +333,6 @@ export const MenuView: React.FC<MenuViewProps> = ({
         </View>
       </View>
 
-      {/* Sección de pedido actual (solo cuando se está modificando) */}
       {isModifying && (
         <View style={styles.currentOrderSection}>
           <Text style={styles.currentOrderTitle}>Pedido Actual</Text>
@@ -282,13 +342,19 @@ export const MenuView: React.FC<MenuViewProps> = ({
             </View>
           ) : (
             currentOrder.length > 0 ? (
-              currentOrder.map(item => (
-                <View key={item.id} style={styles.currentOrderItem}>
-                  <Text style={styles.currentOrderItemText}>
-                    {item.name} x{item.quantity} - ${formatCurrency(item.price * item.quantity)}
-                  </Text>
+              <ScrollView 
+                style={styles.currentOrderScrollView}
+                showsVerticalScrollIndicator={false}
+                nestedScrollEnabled={true}
+              >
+                <View style={styles.currentOrderGrid}>
+                  {currentOrder.map((item, index) => (
+                    <View key={`${item.id}-${item.status}-${index}`} style={styles.currentOrderItemWrapper}>
+                      {renderCurrentOrderItem(item, index)}
+                    </View>
+                  ))}
                 </View>
-              ))
+              </ScrollView>
             ) : (
               <Text style={styles.noOrderText}>No hay pedido actual</Text>
             )
@@ -296,7 +362,6 @@ export const MenuView: React.FC<MenuViewProps> = ({
         </View>
       )}
 
-      {/* Barra de categorías */}
       <View style={styles.categoriesSection}>
         <ScrollView 
           horizontal
@@ -316,7 +381,6 @@ export const MenuView: React.FC<MenuViewProps> = ({
                   isSelected && styles.selectedCategoryButton,
                 ]}
                 onPress={() => {
-                  console.log(`Category clicked: ${category}`);
                   setSelectedCategory(category);
                 }}
               >
@@ -341,7 +405,6 @@ export const MenuView: React.FC<MenuViewProps> = ({
         </ScrollView>
       </View>
 
-      {/* Lista de productos */}
       <View style={styles.productsContainer}>
         <ScrollView style={styles.menuList} showsVerticalScrollIndicator={false}>
           <View style={styles.menuGrid}>
@@ -358,7 +421,7 @@ export const MenuView: React.FC<MenuViewProps> = ({
         <View style={styles.orderSummary}>
           <View style={styles.orderHeader}>
             <Text style={styles.orderTitle}>Resumen del pedido</Text>
-                            <Text style={styles.orderTotal}>${formatCurrency(getTotalPrice())}</Text>
+            <Text style={styles.orderTotal}>${formatCurrency(getTotalPrice())}</Text>
           </View>
           
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.selectedItems}>
@@ -385,7 +448,6 @@ export const MenuView: React.FC<MenuViewProps> = ({
         </View>
       )}
 
-      {/* Product Detail Dialog */}
       <ProductDetailDialog
         product={selectedProduct}
         isVisible={showProductDetail}
@@ -482,7 +544,7 @@ const styles = StyleSheet.create({
   },
   menuList: {
     flex: 1,
-    padding: isTablet ? 24 : 16,
+    padding: isTablet ? 20 : 12,
   },
   menuGrid: {
     flexDirection: isTablet ? 'row' : 'column',
@@ -492,7 +554,7 @@ const styles = StyleSheet.create({
   },
   menuItemWrapper: {
     width: isTablet ? '48%' : '100%',
-    marginBottom: 16,
+    marginBottom: 12,
   },
   menuItem: {
     width: '100%',
@@ -506,12 +568,12 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 3.84,
     elevation: 5,
-    height: isTablet ? 120 : 100,
-    minHeight: isTablet ? 120 : 100,
-    maxHeight: isTablet ? 120 : 100,
+    height: isTablet ? 100 : 80,
+    minHeight: isTablet ? 100 : 80,
+    maxHeight: isTablet ? 100 : 80,
   },
   menuItemContent: {
-    padding: isTablet ? 20 : 16,
+    padding: isTablet ? 16 : 12,
     flex: 1,
     justifyContent: 'space-between',
   },
@@ -529,20 +591,20 @@ const styles = StyleSheet.create({
     height: '100%',
   },
   menuItemName: {
-    fontSize: isTablet ? 18 : 16,
+    fontSize: isTablet ? 16 : 14,
     fontWeight: '600',
     color: '#111827',
-    marginBottom: 4,
+    marginBottom: 2,
   },
   menuItemDescription: {
-    fontSize: isTablet ? 14 : 12,
+    fontSize: isTablet ? 12 : 10,
     color: '#6b7280',
-    marginBottom: 8,
-    lineHeight: 18,
+    marginBottom: 4,
+    lineHeight: 16,
     flex: 1,
   },
   menuItemPrice: {
-    fontSize: isTablet ? 18 : 16,
+    fontSize: isTablet ? 16 : 14,
     fontWeight: 'bold',
     color: '#10b981',
     marginTop: 'auto',
@@ -620,15 +682,48 @@ const styles = StyleSheet.create({
   },
   currentOrderItem: {
     backgroundColor: '#ffffff',
-    padding: 8,
+    padding: 6,
     borderRadius: 6,
-    marginBottom: 6,
     borderLeftWidth: 3,
     borderLeftColor: '#3b82f6',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    minHeight: 60,
+  },
+  currentOrderItemContent: {
+    flex: 1,
+    marginLeft: 8,
   },
   currentOrderItemText: {
     fontSize: isTablet ? 14 : 12,
     color: '#374151',
+    marginBottom: 1,
+    lineHeight: 16,
+    fontWeight: '500',
+  },
+  currentOrderItemStatus: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  statusIndicator: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginRight: 6,
+  },
+  statusText: {
+    fontSize: isTablet ? 13 : 11,
+    fontWeight: '600',
+  },
+  removeCurrentOrderButton: {
+    padding: 10,
+    marginLeft: 6,
+    marginRight: 8,
+    borderRadius: 6,
+    backgroundColor: '#fef2f2',
+    borderWidth: 1,
+    borderColor: '#fecaca',
   },
   noOrderText: {
     fontSize: isTablet ? 14 : 12,
@@ -658,5 +753,31 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#6b7280',
     fontStyle: 'italic',
+  },
+  currentOrderScrollView: {
+    maxHeight: 150,
+  },
+  moreProductsIndicator: {
+    width: '100%',
+    padding: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#f3f4f6',
+    borderRadius: 8,
+    marginTop: 8,
+  },
+  moreProductsText: {
+    fontSize: 14,
+    color: '#6b7280',
+    fontWeight: '500',
+  },
+  currentOrderGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+  },
+  currentOrderItemWrapper: {
+    width: '48%',
+    marginBottom: 6,
   },
 }); 

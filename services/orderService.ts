@@ -74,6 +74,30 @@ export interface TableOrdersResponse {
   };
 }
 
+export interface OrderModification {
+  action: 'add' | 'update' | 'remove';
+  itemId?: string;
+  productId?: string;
+  quantity?: number;
+  customizations?: string[];
+  notes?: string;
+}
+
+export interface ModifyOrderRequest {
+  orderId: string;
+  modifications: OrderModification[];
+  notes?: string;
+}
+
+export interface ModifyOrderResponse {
+  message: string;
+  summary: {
+    added: number;
+    updated: number;
+    removed: number;
+  };
+}
+
 export const orderService = {
   async getTableOrdersBySession(sessionId: string): Promise<TableOrdersResponse> {
     const auth = waiterAuthService.getCurrentAuth();
@@ -140,5 +164,65 @@ export const orderService = {
     }
 
     return await response.json();
+  },
+
+  async modifyOrder(tableId: string, request: ModifyOrderRequest): Promise<ModifyOrderResponse> {
+    const auth = waiterAuthService.getCurrentAuth();
+    if (!auth) {
+      throw new Error('No hay sesión activa');
+    }
+
+    const response = await fetch(`${API_BASE_URL}/orders/table/${tableId}/modify`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${auth.token}`,
+      },
+      body: JSON.stringify(request),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.message || 'Error al modificar la orden');
+    }
+
+    return await response.json();
+  },
+
+  async removeItem(tableId: string, orderId: string, itemId: string, notes?: string): Promise<ModifyOrderResponse> {
+    return this.modifyOrder(tableId, {
+      orderId,
+      modifications: [{
+        action: 'remove',
+        itemId
+      }],
+      notes
+    });
+  },
+
+  async addItem(tableId: string, orderId: string, productId: string, quantity: number, customizations?: string[], notes?: string): Promise<ModifyOrderResponse> {
+    return this.modifyOrder(tableId, {
+      orderId,
+      modifications: [{
+        action: 'add',
+        productId,
+        quantity,
+        customizations: customizations || []
+      }],
+      notes
+    });
+  },
+
+  async updateItem(tableId: string, orderId: string, itemId: string, quantity?: number, customizations?: string[], notes?: string): Promise<ModifyOrderResponse> {
+    return this.modifyOrder(tableId, {
+      orderId,
+      modifications: [{
+        action: 'update',
+        itemId,
+        quantity,
+        customizations
+      }],
+      notes
+    });
   }
 }; 

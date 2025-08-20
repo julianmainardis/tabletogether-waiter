@@ -464,12 +464,13 @@ export default function TableManagement() {
           group.products.flatMap(product => 
             product.variations.flatMap(variation => 
               variation.orderDetails.map(detail => ({
-                id: product.product.name, // Usar el nombre como ID temporal
+                id: `${product.product.name}-${group.status}`, // ID único con estado
                 name: product.product.name,
                 price: variation.unitPrice,
                 quantity: detail.quantity,
                 description: product.product.name,
-                image_url: product.product.image_url
+                image_url: product.product.image_url,
+                status: group.status // Agregar el estado del pedido
               }))
             )
           )
@@ -752,6 +753,8 @@ export default function TableManagement() {
       }
     }
     
+    const currentTable = tables.find(t => t.id === selectedTableForMenu);
+    
     return (
       <MenuView
         tableId={selectedTableForMenu || 0}
@@ -759,6 +762,7 @@ export default function TableManagement() {
         isModifying={isModifyingOrder}
         currentOrder={selectedTableForMenu ? (tableOrders[selectedTableForMenu] || []) : []}
         loadingCurrentOrder={loadingCurrentOrder}
+        tableRealId={currentTable?.realId}
         onBack={() => {
           setCurrentView('tables');
           setSelectedTableForMenu(null);
