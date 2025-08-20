@@ -386,16 +386,12 @@ class AlertsService {
 
       // Encontrar la alerta para verificar su tipo
       const alert = this.alerts.find(a => a.alertId === alertId);
- 
 
-      
-      this.socket.emit('resolve-alert', {
-        alertId,
-        alertType: alert?.alertType,
-        orderId: alert?.orderId,
-        tableId: alert?.tableId
-      }, (response: any) => {
-        if (response.success) {
+      // Configurar listener temporal para la respuesta
+      const onAlertResolved = (response: any) => {
+        if (response.alertId === alertId) {
+          this.socket!.off('alert-resolved', onAlertResolved);
+          
           this.alerts = this.alerts.map(a =>
             a.alertId === alertId ? { ...a, resolved: true } : a
           );
@@ -406,48 +402,63 @@ class AlertsService {
           // Limpiar alertas resueltas del almacenamiento
           this.cleanupResolvedAlertsFromStorage();
 
-          // Si es una alerta de pedido listo, también actualizar el estado del pedido
+          // Si es una alerta de pedido listo, actualizar el estado del pedido
           if (alert && alert.alertType === 'order-ready' && alert.orderId) {
-            // Llamar al endpoint HTTP para marcar como entregado
+            // Llamar al endpoint de prueba
             this.markOrderAsDelivered(alert.orderId).catch(error => {
               console.error('❌ Error al marcar pedido como entregado:', error);
             });
           }
 
-          resolve(response);
-        } else {
-          reject(new Error('Error al resolver alerta'));
+          resolve({ success: true });
         }
+      };
+
+      this.socket.on('alert-resolved', onAlertResolved);
+      
+      // Emitir el evento sin callback
+      this.socket.emit('resolve-alert', {
+        alertId,
+        alertType: alert?.alertType,
+        orderId: alert?.orderId,
+        tableId: alert?.tableId
       });
+
+      // Timeout de seguridad
+      setTimeout(() => {
+        this.socket!.off('alert-resolved', onAlertResolved);
+        reject(new Error('Timeout al resolver alerta'));
+      }, 5000);
     });
   }
 
   private async markOrderAsDelivered(orderId: string) {
     try {
-      // Obtener token de autenticación
       const auth = waiterAuthService.getCurrentAuth();
 
       if (!auth?.token) {
-        console.error('❌ No hay token de autenticación disponible');
         return;
       }
 
-      const url = `${API_BASE_URL}/kitchen/orders/${orderId}/delivered`;
+      const url = `${API_BASE_URL}/kitchen/orders/${orderId}/status`;
 
       const response = await fetch(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${auth.token}`
-        }
+        },
+        body: JSON.stringify({
+          status: 'delivered'
+        })
       });
 
       if (!response.ok) {
         const errorData = await response.text();
-        console.error('❌ Error marcando pedido como entregado:', response.statusText, errorData);
+        console.error('Error marcando pedido como entregado:', response.statusText, errorData);
       }
     } catch (error) {
-      console.error('❌ Error en markOrderAsDelivered:', error);
+      console.error('Error en markOrderAsDelivered:', error);
     }
   }
 
