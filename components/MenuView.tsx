@@ -27,6 +27,7 @@ interface MenuViewProps {
   onBack: () => void;
   onConfirmOrder: (items: any[]) => void;
   tableRealId?: string;
+  onRefresh?: () => void;
 }
 
 const { width: screenWidth } = Dimensions.get('window');
@@ -57,6 +58,7 @@ export const MenuView: React.FC<MenuViewProps> = ({
   onBack,
   onConfirmOrder,
   tableRealId,
+  onRefresh,
 }) => {
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -236,20 +238,25 @@ export const MenuView: React.FC<MenuViewProps> = ({
 
     const handleRemoveItem = async () => {
       try {
-        if (!tableRealId) {
+        if (!tableRealId || !item.orderId || !item.itemId) {
           Alert.alert('Error', 'No se puede eliminar este producto en este momento');
           return;
         }
 
-        // Por ahora, solo mostrar un mensaje de que la funcionalidad está en desarrollo
-        Alert.alert(
-          'Funcionalidad en desarrollo',
-          'La eliminación de productos del pedido está siendo implementada. Por favor, contacte al administrador del sistema.',
-          [{ text: 'Entendido', style: 'default' }]
-        );
+        // Eliminar el producto del pedido
+        await orderService.removeItem(tableRealId, item.orderId, item.itemId);
         
-        // TODO: Implementar eliminación real cuando el backend esté listo
-        // await orderService.removeItem(tableRealId, item.orderId, item.itemId, 'Eliminado por camarero');
+        Alert.alert('Éxito', 'Producto eliminado del pedido');
+        
+        // Llamar a onRefresh para actualizar la vista principal
+        if (onRefresh) {
+          onRefresh();
+        }
+        
+        // Recargar el pedido actual
+        if (onConfirmOrder) {
+          onConfirmOrder([]);
+        }
         
       } catch (error: any) {
         console.error('Error eliminando producto:', error);
@@ -270,7 +277,7 @@ export const MenuView: React.FC<MenuViewProps> = ({
             </Text>
           </View>
         </View>
-        {(isPending || isProcessing) && isModifying && (
+        {isPending && isModifying && (
           <TouchableOpacity
             onPress={() => {
               Alert.alert(
@@ -442,7 +449,13 @@ export const MenuView: React.FC<MenuViewProps> = ({
           
           <Button
             title={isModifying ? "Confirmar modificación" : "Confirmar pedido"}
-            onPress={() => onConfirmOrder(getSelectedItemsList())}
+            onPress={() => {
+              onConfirmOrder(getSelectedItemsList());
+              // Llamar a onRefresh para actualizar la vista principal
+              if (onRefresh) {
+                onRefresh();
+              }
+            }}
             style={styles.confirmButton}
           />
         </View>

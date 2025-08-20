@@ -57,6 +57,8 @@ export interface TableOrdersResponse {
           quantity: number;
           sharedWithAll: boolean;
           sharedWithUsers?: string[];
+          orderId?: string;
+          itemId?: string;
         }>;
       }>;
       hasSharing: boolean;

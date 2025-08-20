@@ -26,6 +26,7 @@ import { tableService } from '../services/tableService';
 import { alertsService } from '../services/alertsService';
 import { orderService, TableOrdersResponse } from '../services/orderService';
 import { paymentService } from '../services/paymentService';
+import { socketService } from '../services/socketService';
 
 type ViewType = 'tables' | 'menu' | 'order-summary';
 
@@ -90,14 +91,24 @@ export default function TableManagement() {
     }
   }, [realTables, user]);
 
-  // Escuchar alertas en tiempo real
+  // Configurar socket y listeners
   useEffect(() => {
-    console.log('🔌 Configurando listeners de alertas en TableManagement');
+    // Conectar socket
+    socketService.connect();
+    
+    // Configurar listener para actualizar cuando se modifica un pedido
+    socketService.onOrderModified(() => {
+      refreshTables();
+      
+      // Si estamos en la vista de modificar pedido, recargar el pedido actual
+      if (isModifyingOrder && selectedTableForMenu) {
+        loadCurrentOrder(selectedTableForMenu);
+      }
+    });
     
     // Cargar alertas existentes al iniciar (excluyendo 'new-order')
     const existingAlerts = alertsService.getActiveAlerts();
     if (existingAlerts.length > 0) {
-      console.log('📋 Cargando alertas activas existentes:', existingAlerts.length);
       const mappedAlerts = existingAlerts
         .filter(alert => alert.alertType !== 'new-order' && alert.alertType !== 'table-occupied') // Excluir alertas de actualización
         .map(alert => ({
@@ -113,11 +124,8 @@ export default function TableManagement() {
     }
     
     const handleNewAlert = (alert: any) => {
-      console.log('🚨 Nueva alerta recibida en TableManagement:', alert);
-      
       // Manejo especial para alertas de nuevo pedido
       if (alert.alertType === 'new-order') {
-        console.log('🍽️ Nuevo pedido detectado para mesa:', alert.tableNumber);
      
         // Actualizar automáticamente la información de la mesa
         handleTableOrderUpdate({
@@ -143,7 +151,6 @@ export default function TableManagement() {
           resolved: alert.resolved
         };
         
-        console.log('➕ Agregando nueva alerta:', newAlert);
         setAlerts(prev => {
           const updated = [...prev, newAlert];
           return updated;
@@ -153,7 +160,6 @@ export default function TableManagement() {
 
     const handleAlertResolved = (data: any) => {
       const { alertId } = data;
-      console.log('✅ Alerta resuelta en TableManagement:', alertId);
       
       // Marcar la alerta como resuelta
       setAlerts(prev => prev.map(alert => 
@@ -162,8 +168,7 @@ export default function TableManagement() {
     };
 
   
-    // Verificar que el alertsService esté escuchando eventos
-    console.log('🎧 Configurando event listeners para alertas');
+
     
     // Agregar event listeners usando el servicio de alertas
     alertsService.addEventListener('new-table-alert', handleNewAlert);
@@ -173,11 +178,11 @@ export default function TableManagement() {
 
     // Cleanup
     return () => {
-      console.log('🧹 Limpiando listeners de alertas');
       alertsService.removeEventListener('new-table-alert', handleNewAlert);
       alertsService.removeEventListener('alert-resolved', handleAlertResolved);
       alertsService.removeEventListener('table-order-updated', handleTableOrderUpdate);
       alertsService.removeEventListener('table-status-updated', handleTableStatusUpdate);
+      socketService.disconnect();
     };
   }, []);
 
@@ -470,7 +475,9 @@ export default function TableManagement() {
                 quantity: detail.quantity,
                 description: product.product.name,
                 image_url: product.product.image_url,
-                status: group.status // Agregar el estado del pedido
+                status: group.status, // Agregar el estado del pedido
+                orderId: detail.orderId, // ID de la orden
+                itemId: detail.itemId // ID del item específico
               }))
             )
           )
@@ -769,6 +776,7 @@ export default function TableManagement() {
           setIsModifyingOrder(false);
         }}
         onConfirmOrder={handleConfirmOrder}
+        onRefresh={refreshTables}
       />
     );
   }
