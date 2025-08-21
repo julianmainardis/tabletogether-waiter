@@ -253,7 +253,7 @@ export default function TableManagement() {
       console.log(`💳 Procesando pago para mesa ${tableId}:`, {
         amount,
         isFullPayment,
-        paymentMethod: selectedPaymentMethod,
+        paymentMethod: 'card',
         currentPaidAmount: realTable.paidAmount || 0,
         orderTotal: realTable.orderTotal || 0
       });
@@ -290,7 +290,7 @@ export default function TableManagement() {
       // Mostrar confirmación al usuario
       Alert.alert(
         "Pago Exitoso",
-        `Se procesó el pago de $${amount.toFixed(2)} con ${selectedPaymentMethod === 'cash' ? 'efectivo' : 'tarjeta'}.\n${paymentResult.message}`,
+        `Se procesó el pago de $${amount.toFixed(2)} con tarjeta.\n${paymentResult.message}`,
         [{ text: "OK" }]
       );
 
@@ -1828,18 +1828,11 @@ const styles = StyleSheet.create({
     borderColor: '#d1d5db',
     minWidth: 100,
   },
-  selectedPaymentMethod: {
-    backgroundColor: '#3b82f6',
-    borderColor: '#3b82f6',
-  },
   paymentMethodText: {
     fontSize: isTablet ? 14 : 12,
     fontWeight: '600',
     color: '#374151',
     marginLeft: 4,
-  },
-  selectedPaymentMethodText: {
-    color: '#ffffff',
   },
   closeTableButton: {
     borderColor: '#10b981',
