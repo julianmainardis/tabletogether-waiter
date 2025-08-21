@@ -1,0 +1,23 @@
+{
+  "expo": {
+    "name": "Mobile Waiter",
+    "slug": "mobile-waiter",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "scheme": "mobile-waiter",
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.gastronflow.mobilewaiter"
+    },
+    "android": {
+      "package": "com.gastronflow.mobilewaiter"
+    },
+    "plugins": [
+      "expo-router"
+    ]
+  }
+}

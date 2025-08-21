@@ -1,6 +1,4 @@
-"use client"
-
-import TableManagement from "../table-management"
+import TableManagement from "./TableManagement"
 
 export default function Page() {
   return <TableManagement />
