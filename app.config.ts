@@ -26,7 +26,8 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     }
   },
   web: {
-    favicon: "./assets/favicon.png"
+    favicon: "./assets/favicon.png",
+    bundler: "metro"
   },
   extra: {
     apiUrl: process.env.EXPO_PUBLIC_API_URL || "http://localhost:3000/api"

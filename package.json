@@ -4,11 +4,11 @@
   "private": true,
   "main": "expo-router/entry",
   "scripts": {
-    "android": "expo start --android",
-    "ios": "expo start --ios",
-    "lint": "expo lint",
-    "start": "expo start",
-    "web": "expo start --web"
+    "start": "EXPO_DEVTOOLS_LISTEN_ADDRESS=0.0.0.0 expo start --port 5001",
+    "android": "expo start --android --port 5001",
+    "ios": "expo start --ios --port 5001",
+    "web": "expo start --web --port 5001",
+    "lint": "expo lint"
   },
   "dependencies": {
     "@expo/dom-webview": "latest",

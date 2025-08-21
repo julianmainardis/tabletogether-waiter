@@ -15,7 +15,6 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { Button } from '../components/ui/button';
 import { Card, CardContent } from '../components/ui/card';
-import { Badge } from '../components/ui/badge';
 import { Alert as UIAlert, AlertDescription } from '../components/ui/alert';
 import Modal from '../components/ui/Modal';
 import { MenuView } from '../components/MenuView';
@@ -25,6 +24,9 @@ import { useWaiterAuth } from '../contexts/WaiterAuthContext';
 import { useTables, TableStatus as RealTableStatus } from '../hooks/useTables';
 import { tableService } from '../services/tableService';
 import { alertsService } from '../services/alertsService';
+import { orderService, TableOrdersResponse } from '../services/orderService';
+import { paymentService } from '../services/paymentService';
+import { socketService } from '../services/socketService';
 
 type ViewType = 'tables' | 'menu' | 'order-summary';
 
@@ -43,111 +45,160 @@ export default function TableManagement() {
   const [showAssignModal, setShowAssignModal] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [paymentAmount, setPaymentAmount] = useState('');
-  const [showPartialPayment, setShowPartialPayment] = useState(false);
   const [selectedDiners, setSelectedDiners] = useState(2);
   const [manualDiners, setManualDiners] = useState('');
   const [validationError, setValidationError] = useState('');
   const [currentView, setCurrentView] = useState<ViewType>('tables');
   const [selectedTableForMenu, setSelectedTableForMenu] = useState<number | null>(null);
-  const [isModifyingOrder, setIsModifyingOrder] = useState(false);
+
   const [tableOrders, setTableOrders] = useState<Record<number, any[]>>({});
   const [tableDiners, setTableDiners] = useState<Record<number, number>>({});
+  const [currentOrderData, setCurrentOrderData] = useState<TableOrdersResponse | null>(null);
+  const [loadingCurrentOrder, setLoadingCurrentOrder] = useState(false);
+  const [animatingTables, setAnimatingTables] = useState<Set<string>>(new Set());
+  const [showPartialPaymentInput, setShowPartialPaymentInput] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [timeUpdate, setTimeUpdate] = useState(0);
 
   // Convertir datos reales del backend al formato de la aplicación
   useEffect(() => {
     if (realTables.length > 0) {
-      const convertedTables: Table[] = realTables.map((realTable: RealTableStatus) => ({
-        id: realTable.number,
-        number: realTable.number,
-        status: realTable.status,
-        capacity: realTable.capacity,
-        occupiedTime: realTable.lastActivity,
-        waiter: realTable.waiter,
-        total: realTable.orderTotal || 0,
-        orderTotal: realTable.orderTotal,
-        paidAmount: realTable.paidAmount || 0,
-        hasPartialPayment: realTable.hasPartialPayment,
-        hasAlerts: realTable.hasAlerts,
-        sessionId: realTable.sessionId,
-        timeOccupied: realTable.timeOccupied
-      }));
-      
+
+      const convertedTables: Table[] = realTables.map((realTable: RealTableStatus) => {
+        const convertedTable = {
+          id: realTable.number, // Mantener el número para la UI
+          number: realTable.number,
+          status: realTable.status,
+          capacity: realTable.capacity,
+          occupiedTime: realTable.createdAt,
+          waiter: realTable.waiter,
+          total: realTable.orderTotal || 0,
+          orderTotal: realTable.orderTotal || 0, // Asegurar que siempre sea un número
+          paidAmount: realTable.paidAmount || 0, // Asegurar que siempre sea un número
+          hasPartialPayment: realTable.hasPartialPayment,
+          hasAlerts: realTable.hasAlerts,
+          sessionId: realTable.sessionId,
+          timeOccupied: realTable.timeOccupied,
+          realId: realTable.id // Agregar el ID real para usar en las llamadas al API
+        };
+
+
+
+
+        return convertedTable;
+      });
+
       setTables(convertedTables);
     }
   }, [realTables, user]);
 
-  // Escuchar alertas en tiempo real
+  // Actualizar tiempo cada minuto
   useEffect(() => {
-    console.log('🔌 Configurando listeners de alertas en TableManagement');
-    
-    // Cargar alertas existentes al iniciar
+    const interval = setInterval(() => {
+      setTimeUpdate(prev => prev + 1);
+    }, 60000); // Actualizar cada minuto
+
+    return () => clearInterval(interval);
+  }, []);
+
+  // Configurar socket y listeners
+  useEffect(() => {
+    // Conectar socket
+    socketService.connect();
+
+    // Configurar listener para actualizar cuando se modifica un pedido
+    socketService.onOrderModified(() => {
+      refreshTables();
+
+      // Si estamos en la vista de modificar pedido, recargar el pedido actual
+      if (selectedTableForMenu) {
+        loadCurrentOrder(selectedTableForMenu);
+      }
+    });
+
+    // Cargar alertas existentes al iniciar (excluyendo 'new-order')
     const existingAlerts = alertsService.getActiveAlerts();
     if (existingAlerts.length > 0) {
-      console.log('📋 Cargando alertas activas existentes:', existingAlerts.length);
-      const mappedAlerts = existingAlerts.map(alert => ({
-        id: alert.alertId,
-        tableId: alert.tableNumber,
-        type: alert.alertType,
-        message: alert.message,
-        timestamp: alert.timestamp,
-        priority: alert.priority,
-        resolved: alert.resolved
-      }));
+      const mappedAlerts = existingAlerts
+        .filter(alert => alert.alertType !== 'new-order' && alert.alertType !== 'table-occupied') // Excluir alertas de actualización
+        .map(alert => ({
+          id: alert.alertId,
+          tableId: alert.tableNumber,
+          type: alert.alertType as AlertType, // Cast para excluir 'new-order'
+          message: alert.message,
+          timestamp: alert.timestamp,
+          priority: alert.priority,
+          resolved: alert.resolved
+        }));
       setAlerts(mappedAlerts);
     }
-    
+
     const handleNewAlert = (alert: any) => {
-      console.log('🚨 Nueva alerta recibida en TableManagement:', alert);
-      console.log('📊 Estado actual de alertas:', alerts);
-      
-      // Agregar la alerta a la lista local
-      const newAlert = {
-        id: alert.alertId,
-        tableId: alert.tableNumber,
-        type: alert.alertType,
-        message: alert.message,
-        timestamp: new Date(alert.timestamp),
-        priority: alert.priority,
-        resolved: alert.resolved
-      };
-      
-      console.log('➕ Agregando nueva alerta:', newAlert);
-      setAlerts(prev => {
-        const updated = [...prev, newAlert];
-        console.log('📋 Lista actualizada de alertas:', updated);
-        return updated;
-      });
+      // Manejo especial para alertas de nuevo pedido
+      if (alert.alertType === 'new-order') {
+
+        // Actualizar automáticamente la información de la mesa
+        handleTableOrderUpdate({
+          tableNumber: alert.tableNumber,
+          orderId: alert.orderId,
+          total: alert.total,
+          message: alert.message
+        });
+
+        // NO agregar como alerta que requiera atención
+        return;
+      }
+
+      // Para otros tipos de alerta, agregar normalmente (excluyendo 'new-order' y 'table-occupied')
+      if (alert.alertType !== 'new-order' && alert.alertType !== 'table-occupied') {
+        const newAlert = {
+          id: alert.alertId,
+          tableId: alert.tableNumber,
+          type: alert.alertType as AlertType, // Cast para excluir 'new-order'
+          message: alert.message,
+          timestamp: new Date(alert.timestamp),
+          priority: alert.priority,
+          resolved: alert.resolved
+        };
+
+        setAlerts(prev => {
+          const updated = [...prev, newAlert];
+          return updated;
+        });
+      }
     };
 
     const handleAlertResolved = (data: any) => {
       const { alertId } = data;
-      console.log('✅ Alerta resuelta en TableManagement:', alertId);
-      
+
       // Marcar la alerta como resuelta
-      setAlerts(prev => prev.map(alert => 
+      setAlerts(prev => prev.map(alert =>
         alert.id === alertId ? { ...alert, resolved: true } : alert
       ));
     };
 
-    // Verificar si el servicio está conectado
-    console.log('🔍 Estado del alertsService:', {
-      isConnected: alertsService.isConnectedToServer()
-    });
 
-    // Verificar que el alertsService esté escuchando eventos
-    console.log('🎧 Configurando event listeners para alertas');
-    
+
+
     // Agregar event listeners usando el servicio de alertas
     alertsService.addEventListener('new-table-alert', handleNewAlert);
     alertsService.addEventListener('alert-resolved', handleAlertResolved);
+    alertsService.addEventListener('table-order-updated', handleTableOrderUpdate);
+    alertsService.addEventListener('table-status-updated', handleTableStatusUpdate);
 
     // Cleanup
     return () => {
-      console.log('🧹 Limpiando listeners de alertas');
       alertsService.removeEventListener('new-table-alert', handleNewAlert);
       alertsService.removeEventListener('alert-resolved', handleAlertResolved);
+      alertsService.removeEventListener('table-order-updated', handleTableOrderUpdate);
+      alertsService.removeEventListener('table-status-updated', handleTableStatusUpdate);
+      socketService.disconnect();
     };
   }, []);
+
+
+
+
 
   // Filtrar mesas según el estado seleccionado
   const filteredTables = tables.filter(table => {
@@ -199,15 +250,49 @@ export default function TableManagement() {
         return;
       }
 
-      if (isFullPayment || (realTable.orderTotal || 0) - (realTable.paidAmount || 0) <= amount) {
-        // Pago completo - liberar mesa
-        await tableService.updateTableStatus(realTable.id, {
-          status: 'available'
-        });
+      console.log(`💳 Procesando pago para mesa ${tableId}:`, {
+        amount,
+        isFullPayment,
+        paymentMethod: 'card',
+        currentPaidAmount: realTable.paidAmount || 0,
+        orderTotal: realTable.orderTotal || 0
+      });
+
+      // Usar el nuevo servicio de pagos
+      const paymentResult = await paymentService.processTablePayment(realTable.id, amount, 'card');
+
+      console.log(`✅ Resultado del pago:`, paymentResult);
+
+      // Actualizar inmediatamente el estado local con la información del pago
+      if (paymentResult.success) {
+        setTables(prev => prev.map(table => {
+          if (table.number === tableId) {
+            return {
+              ...table,
+              paidAmount: paymentResult.newPaidAmount || 0
+            };
+          }
+          return table;
+        }));
+
+        // También actualizar selectedTable si está abierto el modal
+        if (selectedTable && selectedTable.number === tableId) {
+          setSelectedTable(prev => prev ? {
+            ...prev,
+            paidAmount: paymentResult.newPaidAmount || 0
+          } : null);
+        }
       }
 
-      // Refrescar los datos del backend
+      // Refrescar los datos del backend para asegurar sincronización
       await refreshTables();
+
+      // Mostrar confirmación al usuario
+      Alert.alert(
+        "Pago Exitoso",
+        `Se procesó el pago de $${amount.toFixed(2)} con tarjeta.\n${paymentResult.message}`,
+        [{ text: "OK" }]
+      );
 
     } catch (error) {
       console.error('Error processing payment:', error);
@@ -216,7 +301,6 @@ export default function TableManagement() {
 
     setShowPaymentModal(false);
     setPaymentAmount('');
-    setShowPartialPayment(false);
   };
 
   const addAlert = (tableId: number, type: AlertType, message: string) => {
@@ -232,22 +316,92 @@ export default function TableManagement() {
     setAlerts(prev => [...prev, newAlert]);
   };
 
+  // Función para manejar actualizaciones de pedidos de mesa
+  const handleTableOrderUpdate = async (data: { tableNumber: number; orderId: string; total: number; message: string }) => {
+    const { tableNumber, orderId, total } = data;
+    console.log(`🔄 Nuevo pedido recibido para mesa ${tableNumber}:`, {
+      orderId,
+      total
+    });
+
+    try {
+      // Animar la mesa para indicar que se actualizó
+      setAnimatingTables(prev => new Set([...prev, tableNumber.toString()]));
+
+      // Remover la animación después de 2 segundos
+      setTimeout(() => {
+        setAnimatingTables(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(tableNumber.toString());
+          return newSet;
+        });
+      }, 2000);
+
+      // Refrescar datos del backend para obtener información actualizada
+      setTimeout(async () => {
+        try {
+          await refreshTables();
+        } catch (error) {
+          console.error('Error refrescando datos del backend:', error);
+        }
+      }, 500);
+
+    } catch (error) {
+      console.error(`Error procesando actualización de mesa ${tableNumber}:`, error);
+    }
+  };
+
+  // Función para manejar actualizaciones de estado de mesa
+  const handleTableStatusUpdate = async (data: { tableNumber: number; userName: string; message: string }) => {
+    const { tableNumber, userName } = data;
+
+    try {
+      // Animar la mesa para indicar que se actualizó
+      setAnimatingTables(prev => new Set([...prev, tableNumber.toString()]));
+
+      // Remover la animación después de 2 segundos
+      setTimeout(() => {
+        setAnimatingTables(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(tableNumber.toString());
+          return newSet;
+        });
+      }, 2000);
+
+      // Refrescar datos del backend para obtener información actualizada
+      setTimeout(async () => {
+        try {
+          console.log(`🔄 Refrescando datos del backend para mesa ${tableNumber}`);
+          await refreshTables();
+        } catch (error) {
+          console.error('Error refrescando datos del backend:', error);
+        }
+      }, 500);
+
+    } catch (error) {
+      console.error(`Error procesando actualización de estado de mesa ${tableNumber}:`, error);
+    }
+  };
+
   const resolveAlert = async (alertId: string) => {
     try {
       console.log(`🔄 Resolviendo alerta: ${alertId}`);
       await alertsService.resolveAlert(alertId);
-      
+
       // Recargar alertas activas después de resolver
       const updatedAlerts = alertsService.getActiveAlerts();
-      const mappedAlerts = updatedAlerts.map(alert => ({
-        id: alert.alertId,
-        tableId: alert.tableNumber,
-        type: alert.alertType,
-        message: alert.message,
-        timestamp: alert.timestamp,
-        priority: alert.priority,
-        resolved: alert.resolved
-      }));
+      const mappedAlerts = updatedAlerts
+        .filter(alert => alert.alertType !== 'new-order' && alert.alertType !== 'table-occupied') // Excluir alertas de actualización
+        .map(alert => ({
+          id: alert.alertId,
+          tableId: alert.tableNumber,
+          type: alert.alertType as AlertType, // Cast para excluir 'new-order'
+          message: alert.message,
+          timestamp: alert.timestamp,
+          priority: alert.priority,
+          resolved: alert.resolved
+        }));
+
       setAlerts(mappedAlerts);
       console.log(`✅ Alerta ${alertId} resuelta y lista actualizada`);
     } catch (error) {
@@ -255,22 +409,39 @@ export default function TableManagement() {
     }
   };
 
-  const getTimeAgo = (timestamp: Date) => {
+  const getTimeAgo = (timestamp: Date | undefined) => {
+    if (!timestamp || !(timestamp instanceof Date) || isNaN(timestamp.getTime())) {
+      return 'Reciente';
+    }
+
     const now = new Date();
     const diffInMinutes = Math.floor((now.getTime() - timestamp.getTime()) / (1000 * 60));
-    
+
     if (diffInMinutes < 1) return 'Ahora';
     if (diffInMinutes < 60) return `${diffInMinutes}m`;
-    
+
     const hours = Math.floor(diffInMinutes / 60);
     const minutes = diffInMinutes % 60;
-    
+
     if (hours < 24) {
       return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`;
     }
-    
+
     const days = Math.floor(hours / 24);
     return `${days}d`;
+  };
+
+  const getSessionTime = (timeOccupied?: string) => {
+    // El backend ya calcula timeOccupied correctamente usando started_at
+    // Solo necesitamos retornarlo tal como viene
+    return timeOccupied || null;
+  };
+
+  // Función que incluye timeUpdate para forzar la actualización
+  const getSessionTimeWithUpdate = (timeOccupied?: string) => {
+    // Usar timeUpdate para forzar la recalculación
+    timeUpdate; // Esto fuerza la recalculación cuando cambia
+    return getSessionTime(timeOccupied);
   };
 
   const handleTablePress = (table: Table) => {
@@ -300,14 +471,9 @@ export default function TableManagement() {
       setSelectedDiners(2);
       setManualDiners('');
       setValidationError('');
-      
+
       // Refrescar los datos del backend
       await refreshTables();
-      
-      // Redirigir al menú después de asignar la mesa
-      setSelectedTableForMenu(tableId);
-      setIsModifyingOrder(false);
-      setCurrentView('menu');
 
     } catch (error) {
       console.error('Error assigning table:', error);
@@ -315,23 +481,126 @@ export default function TableManagement() {
     }
   };
 
-  const handleNewOrder = (tableId: number) => {
-    setSelectedTableForMenu(tableId);
-    setIsModifyingOrder(false);
-    setCurrentView('menu');
+  const handleCloseTableManually = async (tableId: number) => {
+    try {
+      // Encontrar la mesa en los datos reales del backend
+      const realTable = realTables.find(t => t.number === tableId);
+      if (!realTable) {
+        console.error('Table not found in backend data');
+        return;
+      }
+
+      // Confirmar la acción con el usuario
+      Alert.alert(
+        "Cerrar Mesa",
+        "¿Estás seguro de que quieres cerrar esta mesa manualmente? Esta acción no se puede deshacer.",
+        [
+          { text: "Cancelar", style: "cancel" },
+          {
+            text: "Cerrar Mesa",
+            style: "destructive",
+            onPress: async () => {
+              try {
+                const result = await tableService.closeTableManually(realTable.id);
+
+                if (result.success) {
+                  Alert.alert(
+                    "Mesa Cerrada",
+                    "La mesa ha sido cerrada exitosamente.",
+                    [{ text: "OK" }]
+                  );
+
+                  // Cerrar el modal y refrescar datos
+                  setShowTableModal(false);
+                  await refreshTables();
+                } else {
+                  Alert.alert("Error", result.message || "No se pudo cerrar la mesa");
+                }
+              } catch (error) {
+                console.error('Error closing table:', error);
+                Alert.alert("Error", "No se pudo cerrar la mesa");
+              }
+            }
+          }
+        ]
+      );
+
+    } catch (error) {
+      console.error('Error preparing to close table:', error);
+      Alert.alert("Error", "No se pudo procesar la solicitud");
+    }
   };
+
+
 
   const handleModifyOrder = (tableId: number) => {
     setSelectedTableForMenu(tableId);
-    setIsModifyingOrder(true);
     setCurrentView('menu');
+    loadCurrentOrder(tableId);
+  };
+
+  const loadCurrentOrder = async (tableId: number) => {
+    try {
+      setLoadingCurrentOrder(true);
+      console.log('🔄 Cargando pedido actual para mesa:', tableId);
+
+      // Encontrar la mesa para obtener el realId
+      const table = tables.find(t => t.id === tableId);
+      if (!table || !table.realId) {
+        console.error('❌ No se encontró la mesa o no tiene realId:', tableId);
+        Alert.alert('Error', 'No se pudo identificar la mesa');
+        return;
+      }
+
+      console.log('🔍 Usando realId para la mesa:', table.realId);
+      const orderData = await orderService.getOrdersByTableId(table.realId);
+      console.log('📦 Pedido actual cargado:', orderData);
+
+      // El backend devuelve groupedOrders, necesitamos extraer los items de ahí
+      let currentOrderItems: any[] = [];
+
+      if (orderData && orderData.groupedOrders) {
+        // Extraer todos los productos de todos los grupos de órdenes
+        currentOrderItems = orderData.groupedOrders.flatMap(group =>
+          group.products.flatMap(product =>
+            product.variations.flatMap(variation =>
+              variation.orderDetails.map(detail => ({
+                id: `${product.product.name}-${group.status}`, // ID único con estado
+                name: product.product.name,
+                price: variation.unitPrice,
+                quantity: detail.quantity,
+                description: product.product.name,
+                image_url: product.product.image_url,
+                status: group.status, // Agregar el estado del pedido
+                orderId: detail.orderId, // ID de la orden
+                itemId: detail.itemId // ID del item específico
+              }))
+            )
+          )
+        );
+      }
+
+      setTableOrders(prev => ({
+        ...prev,
+        [tableId]: currentOrderItems
+      }));
+
+    } catch (error) {
+      console.error('❌ Error cargando pedido actual:', error);
+      Alert.alert('Error', 'No se pudo cargar el pedido actual');
+      setTableOrders(prev => ({
+        ...prev,
+        [tableId]: []
+      }));
+    } finally {
+      setLoadingCurrentOrder(false);
+    }
   };
 
   const handlePaymentRequest = (table: Table) => {
     setSelectedTable(table);
+    setShowTableModal(false);
     setShowPaymentModal(true);
-    setShowPartialPayment(false);
-    setPaymentAmount('');
   };
 
   const handlePartialPayment = () => {
@@ -340,38 +609,122 @@ export default function TableManagement() {
       setValidationError('Por favor ingrese un monto válido');
       return;
     }
-    if (selectedTable && amount > (selectedTable.orderTotal || 0)) {
-      setValidationError('El monto no puede ser mayor al total');
+
+    // Encontrar la mesa en los datos reales del backend
+    const realTable = realTables.find(t => t.number === selectedTable?.number);
+    if (!realTable) {
+      setValidationError('No se pudo identificar la mesa');
       return;
     }
+
+    // Validar contra el total real del backend
+    const remainingAmount = (realTable.orderTotal || 0) - (realTable.paidAmount || 0);
+    if (amount > remainingAmount) {
+      setValidationError(`El monto no puede ser mayor a $${remainingAmount.toFixed(2)} (restante)`);
+      return;
+    }
+
     processPayment(selectedTable!.id, amount, false);
   };
 
-  const handleFullPayment = () => {
+  const handleFullPayment = async () => {
     if (selectedTable) {
-      const remainingAmount = (selectedTable.orderTotal || 0) - (selectedTable.paidAmount || 0);
-      processPayment(selectedTable.id, remainingAmount, true);
+      try {
+        // Encontrar la mesa en los datos reales del backend
+        const realTable = realTables.find(t => t.number === selectedTable.number);
+        if (!realTable) {
+          console.error('Table not found in backend data');
+          return;
+        }
+
+        // Calcular el monto restante usando los datos reales del backend
+        const remainingAmount = (realTable.orderTotal || 0) - (realTable.paidAmount || 0);
+
+        console.log(`💰 Calculando pago completo:`, {
+          orderTotal: realTable.orderTotal,
+          paidAmount: realTable.paidAmount,
+          remainingAmount
+        });
+
+        if (remainingAmount <= 0) {
+          Alert.alert('Información', 'La cuenta ya está pagada completamente');
+          return;
+        }
+
+        processPayment(selectedTable.id, remainingAmount, true);
+      } catch (error) {
+        console.error('Error calculating full payment:', error);
+        Alert.alert('Error', 'No se pudo calcular el monto del pago');
+      }
     }
   };
 
-  const handleConfirmOrder = (items: any[]) => {
+  const handleConfirmOrder = async (items: any[]) => {
     if (selectedTableForMenu) {
-      setTableOrders(prev => ({
-        ...prev,
-        [selectedTableForMenu]: items
-      }));
+      try {
+        const currentTable = tables.find(t => t.id === selectedTableForMenu);
+        if (!currentTable?.realId) {
+          Alert.alert('Error', 'No se pudo identificar la mesa');
+          return;
+        }
 
-      const total = items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-      
-      setTables(prev => prev.map(table => 
-        table.id === selectedTableForMenu 
-          ? { ...table, orderTotal: Math.round(total * 100) / 100 }
-          : table
-      ));
+        // Obtener los productos que están en el pedido actual
+        const currentOrderItems = tableOrders[selectedTableForMenu] || [];
 
-      setCurrentView('tables');
-      setSelectedTableForMenu(null);
-      setIsModifyingOrder(false);
+        // Filtrar solo los productos que están en estado 'pending' (nuevos)
+        const newItems = items.filter(item =>
+          !currentOrderItems.some(currentItem =>
+            currentItem.id === item.id && currentItem.status === 'pending'
+          )
+        );
+
+        // Enviar todos los productos nuevos en una sola orden al backend
+        if (newItems.length > 0) {
+          try {
+            // Crear las modificaciones para todos los productos
+            const modifications = newItems.map(item => ({
+              action: 'add' as const,
+              productId: String(item.id),
+              quantity: item.quantity,
+              customizations: Array.isArray(item.customizations)
+                ? item.customizations.map((c: any) => typeof c === 'string' ? c : String(c))
+                : (item.customizations ? [String(item.customizations)] : [])
+            }));
+
+            // Enviar todos los productos en una sola llamada
+            await orderService.modifyOrder(currentTable.realId, {
+              orderId: '', // Para 'add' se creará una nueva orden
+              modifications: modifications
+            });
+
+            Alert.alert('Éxito', `${newItems.length} producto(s) agregado(s) al pedido`);
+          } catch (error: any) {
+            console.error('Error agregando productos:', error);
+            Alert.alert('Error', `No se pudieron agregar los productos: ${error.message}`);
+            return;
+          }
+        }
+
+        setTableOrders(prev => ({
+          ...prev,
+          [selectedTableForMenu]: items
+        }));
+
+        // Recargar el pedido actual después de confirmar para obtener el total real del backend
+        await loadCurrentOrder(selectedTableForMenu);
+
+        // Actualizar el total de la mesa con los datos reales del backend
+        setTimeout(async () => {
+          await refreshTables();
+        }, 500);
+
+        setCurrentView('tables');
+        setSelectedTableForMenu(null);
+
+      } catch (error: any) {
+        console.error('Error confirmando pedido:', error);
+        Alert.alert('Error', 'No se pudo confirmar el pedido');
+      }
     }
   };
 
@@ -385,20 +738,16 @@ export default function TableManagement() {
     setValidationError('');
   };
 
-  const handleRefresh = async () => {
-    try {
-      console.log('🔄 Actualizando datos de mesas...');
-      await refreshTables();
-      console.log('✅ Datos actualizados correctamente');
-    } catch (error) {
-      console.error('❌ Error al actualizar datos:', error);
-    }
+  const formatCurrency = (amount: number): string => {
+    return Number(amount).toFixed(2);
   };
 
   const renderTableCard = ({ item: table }: { item: Table }) => {
     const config = statusConfig[table.status];
     const hasAlert = activeAlerts.some(alert => alert.tableId === table.id);
     const order = tableOrders[table.id] || [];
+    const isAnimating = animatingTables.has(table.id.toString());
+
 
     return (
       <TouchableOpacity
@@ -409,7 +758,8 @@ export default function TableManagement() {
         <Card style={StyleSheet.flatten([
           styles.tableCardInner,
           { backgroundColor: config.color },
-          hasAlert && styles.tableCardWithAlert
+          hasAlert && styles.tableCardWithAlert,
+          isAnimating && styles.tableCardAnimating
         ])}>
           <CardContent style={styles.tableContent}>
             <View style={styles.tableHeader}>
@@ -419,20 +769,25 @@ export default function TableManagement() {
             </View>
 
             <View style={styles.tableInfo}>
-              {table.timeOccupied ? (
+              {table.timeOccupied && table.sessionId ? (
                 <Text style={[styles.tableInfoText, { color: config.textColor }]}>
-                  Tiempo: {table.timeOccupied}
+                  Tiempo: {getSessionTimeWithUpdate(table.timeOccupied)}
                 </Text>
               ) : null}
-              
-              {table.orderTotal ? (
-                <Text style={[styles.orderTotal, { color: config.textColor }]}>
-                  €{table.orderTotal}
-                  {table.paidAmount && (
-                    <Text style={styles.paidAmount}> (-€{table.paidAmount})</Text>
+
+              {/* Solo mostrar el total si hay una sesión activa */}
+              {table.sessionId && (
+                <View style={styles.tableTotalInfo}>
+                  <Text style={[styles.orderTotal, { color: config.textColor }]}>
+                    ${formatCurrency(table.orderTotal || 0)}
+                  </Text>
+                  {table.paidAmount && table.paidAmount > 0 && (
+                    <Text style={[styles.paidAmount, { color: config.textColor }]}>
+                      Pagado: ${formatCurrency(table.paidAmount)}
+                    </Text>
                   )}
-                </Text>
-              ) : null}
+                </View>
+              )}
             </View>
 
             {hasAlert && (
@@ -472,7 +827,7 @@ export default function TableManagement() {
           </CardContent>
         </Card>
       </TouchableOpacity>
-      
+
       {Object.entries(statusConfig).map(([status, config]) => {
         const count = statusCounts[status as TableStatus] || 0;
         return (
@@ -520,16 +875,20 @@ export default function TableManagement() {
           onPress={() => setShowAlerts(!showAlerts)}
           style={styles.alertsToggle}
         >
-          <Ionicons 
-            name={showAlerts ? "chevron-up" : "chevron-down"} 
-            size={20} 
-            color="#6b7280" 
+          <Ionicons
+            name={showAlerts ? "chevron-up" : "chevron-down"}
+            size={20}
+            color="#6b7280"
           />
         </TouchableOpacity>
       </View>
-      
+
       {showAlerts && (
-        <ScrollView style={styles.alertsList} showsVerticalScrollIndicator={false}>
+        <ScrollView
+          style={styles.alertsList}
+          showsVerticalScrollIndicator={false}
+          nestedScrollEnabled={true}
+        >
           {activeAlerts.length === 0 ? (
             <Text style={styles.noAlertsText}>No hay alertas activas</Text>
           ) : (
@@ -584,19 +943,22 @@ export default function TableManagement() {
         currentDiners = 2;
       }
     }
-    
+
+    const currentTable = tables.find(t => t.id === selectedTableForMenu);
+
     return (
       <MenuView
         tableId={selectedTableForMenu || 0}
         diners={currentDiners || 2}
-        isModifying={isModifyingOrder}
         currentOrder={selectedTableForMenu ? (tableOrders[selectedTableForMenu] || []) : []}
+        loadingCurrentOrder={loadingCurrentOrder}
+        tableRealId={currentTable?.realId}
         onBack={() => {
           setCurrentView('tables');
           setSelectedTableForMenu(null);
-          setIsModifyingOrder(false);
         }}
         onConfirmOrder={handleConfirmOrder}
+        onRefresh={refreshTables}
       />
     );
   }
@@ -604,7 +966,7 @@ export default function TableManagement() {
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#f9fafb" />
-      
+
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
@@ -616,24 +978,21 @@ export default function TableManagement() {
           )}
         </View>
         <View style={styles.headerRight}>
+          <Button
+            title="🔄 Actualizar"
+            onPress={refreshTables}
+            variant="outline"
+            size="sm"
+            style={styles.refreshButton}
+          />
           {user && (
-            <>
-              <Button
-                title="Actualizar"
-                onPress={handleRefresh}
-                variant="outline"
-                size="sm"
-                style={styles.refreshButton}
-                icon={<Ionicons name="refresh" size={16} color="#10b981" />}
-              />
-              <Button
-                title="Cerrar Sesión"
-                onPress={logout}
-                variant="outline"
-                size="sm"
-                style={styles.logoutButton}
-              />
-            </>
+            <Button
+              title="Cerrar Sesión"
+              onPress={logout}
+              variant="outline"
+              size="sm"
+              style={styles.logoutButton}
+            />
           )}
         </View>
       </View>
@@ -708,7 +1067,7 @@ export default function TableManagement() {
               )}
               {selectedTable.orderTotal && (
                 <Text style={styles.infoText}>
-                  <Text style={styles.infoLabel}>Total cuenta:</Text> €{selectedTable.orderTotal}
+                  <Text style={styles.infoLabel}>Total cuenta:</Text> ${selectedTable.orderTotal}
                 </Text>
               )}
             </View>
@@ -738,7 +1097,10 @@ export default function TableManagement() {
                           </Text>
                           <Button
                             title="Resolver"
-                            onPress={() => resolveAlert(alert.id)}
+                            onPress={() => {
+                              console.log('🔘 Botón resolver presionado para alerta:', alert.id);
+                              resolveAlert(alert.id);
+                            }}
                             variant="ghost"
                             size="sm"
                           />
@@ -752,7 +1114,7 @@ export default function TableManagement() {
             {/* Acciones disponibles */}
             <View style={styles.actions}>
               <Text style={styles.actionsTitle}>Acciones disponibles:</Text>
-              
+
               {selectedTable.status === "available" && (
                 <Button
                   title="Asignar mesa"
@@ -768,16 +1130,6 @@ export default function TableManagement() {
               {selectedTable.status === "occupied" && (
                 <View style={styles.occupiedActions}>
                   <Button
-                    title="Realizar pedido"
-                    onPress={() => {
-                      setShowTableModal(false);
-                      handleNewOrder(selectedTable.id);
-                    }}
-                    variant="outline"
-                    icon={<Ionicons name="add" size={16} color="#374151" />}
-                    style={styles.actionButton}
-                  />
-                  <Button
                     title="Modificar pedido"
                     onPress={() => {
                       setShowTableModal(false);
@@ -787,15 +1139,33 @@ export default function TableManagement() {
                     icon={<Ionicons name="create" size={16} color="#374151" />}
                     style={styles.actionButton}
                   />
-                  <Button
-                    title="Procesar pago"
-                    onPress={() => {
-                      handlePaymentRequest(selectedTable);
-                    }}
-                    variant="outline"
-                    icon={<Ionicons name="card" size={16} color="#374151" />}
-                    style={styles.actionButton}
-                  />
+
+                  {/* Botón inteligente: Pago o Cerrar mesa según el estado */}
+                  {(() => {
+                    const orderTotal = selectedTable.orderTotal || 0;
+
+                    return !orderTotal ? (
+                      <Button
+                        title="Cerrar mesa"
+                        onPress={() => {
+                          handleCloseTableManually(selectedTable.id);
+                        }}
+                        variant="outline"
+                        icon={<Ionicons name="checkmark-circle" size={16} color="#10b981" />}
+                        style={StyleSheet.flatten([styles.actionButton, styles.closeTableButton])}
+                      />
+                    ) : (
+                      <Button
+                        title="Procesar pago"
+                        onPress={() => {
+                          handlePaymentRequest(selectedTable);
+                        }}
+                        variant="outline"
+                        icon={<Ionicons name="card" size={16} color="#374151" />}
+                        style={styles.actionButton}
+                      />
+                    );
+                  })()}
                 </View>
               )}
 
@@ -871,48 +1241,74 @@ export default function TableManagement() {
       {/* Modal de pago */}
       <Modal
         visible={showPaymentModal}
-        onClose={() => setShowPaymentModal(false)}
+        onClose={() => {
+          setShowPaymentModal(false);
+          setShowPartialPaymentInput(false);
+          setPaymentAmount('');
+        }}
         title="Procesar Pago"
       >
-        <View style={styles.modalContent}>
+        <View style={styles.paymentModalContent}>
           {selectedTable && (
             <>
-              <Text style={styles.modalTitle}>Mesa {selectedTable.number}</Text>
-              <Text style={styles.modalSubtitle}>
-                Total a pagar: €{selectedTable.orderTotal?.toFixed(2) || '0.00'}
-              </Text>
+              <View style={styles.paymentInfo}>
+                <Text style={styles.modalTitle}>Mesa {selectedTable.number}</Text>
 
-              <View style={styles.paymentButtonsRow}>
-                <Button
-                  title="Pago Completo"
-                  onPress={handleFullPayment}
-                  style={styles.fullPaymentButton}
-                  icon={<Ionicons name="card" size={20} color="#ffffff" />}
-                />
+                {/* Información del total */}
+                <Text style={styles.paymentInfoText}>
+                  <Text style={styles.paymentLabel}>Total de la cuenta:</Text> ${formatCurrency(selectedTable.orderTotal || 0)}
+                </Text>
 
-                <Button
-                  title="Pago Parcial"
-                  onPress={() => setShowPartialPayment(true)}
-                  variant="outline"
-                  style={styles.partialPaymentButton}
-                  icon={<Ionicons name="calculator" size={20} color="#3b82f6" />}
-                />
+                {/* Mostrar información de pagos previos solo si hay pagos */}
+                {selectedTable.paidAmount && selectedTable.paidAmount > 0 && (
+                  <>
+                    <Text style={styles.paymentInfoText}>
+                      <Text style={styles.paymentLabel}>Ya pagado:</Text> ${formatCurrency(selectedTable.paidAmount)}
+                    </Text>
+                    <Text style={[styles.paymentInfoText, styles.remainingAmount]}>
+                      <Text style={styles.paymentLabel}>Falta pagar:</Text> ${formatCurrency((selectedTable.orderTotal || 0) - selectedTable.paidAmount)}
+                    </Text>
+                  </>
+                )}
               </View>
 
-              {showPartialPayment && (
+              <View style={styles.paymentOptions}>
+
+                <Text style={styles.paymentOptionsTitle}>Selecciona el tipo de pago:</Text>
+
+                <TouchableOpacity
+                  style={styles.fullPaymentButton}
+                  onPress={handleFullPayment}
+                >
+                  <Ionicons name="card" size={20} color="#ffffff" style={styles.buttonIcon} />
+                  <Text style={styles.paymentButtonText}>Pago Completo</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.partialPaymentButton}
+                  onPress={() => setShowPartialPaymentInput(true)}
+                >
+                  <Ionicons name="calculator" size={20} color="#3b82f6" style={styles.buttonIcon} />
+                  <Text style={styles.partialPaymentButtonText}>Pago Parcial</Text>
+                </TouchableOpacity>
+              </View>
+
+              {showPartialPaymentInput && (
                 <View style={styles.partialPaymentSection}>
+                  <Text style={styles.partialPaymentLabel}>Ingresa el monto a pagar:</Text>
                   <TextInput
                     style={styles.paymentInput}
-                    placeholder="Ingresa el monto"
+                    placeholder="0.00"
                     value={paymentAmount}
                     onChangeText={setPaymentAmount}
                     keyboardType="numeric"
                   />
-                  <Button
-                    title="Pagar"
-                    onPress={handlePartialPayment}
+                  <TouchableOpacity
                     style={styles.payButton}
-                  />
+                    onPress={handlePartialPayment}
+                  >
+                    <Text style={styles.payButtonText}>Confirmar Pago</Text>
+                  </TouchableOpacity>
                 </View>
               )}
             </>
@@ -985,7 +1381,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: isTablet ? 0 : 1,
     borderColor: '#e5e7eb',
     padding: isTablet ? 16 : 12,
-    height: isTablet ? '100%' : undefined,
+    paddingBottom: isTablet ? 32 : 24,
   },
   rightPanel: {
     flex: 1,
@@ -1021,7 +1417,6 @@ const styles = StyleSheet.create({
   },
   alertsSection: {
     marginTop: 16,
-    flex: 1,
   },
   alertsHeader: {
     flexDirection: 'row',
@@ -1038,7 +1433,7 @@ const styles = StyleSheet.create({
     padding: 4,
   },
   alertsList: {
-    flex: 1,
+    maxHeight: isTablet ? screenHeight * 0.85 : screenHeight * 0.8,
   },
   noAlertsText: {
     textAlign: 'center',
@@ -1084,7 +1479,7 @@ const styles = StyleSheet.create({
   tableCard: {
     flex: 1,
     margin: 4,
-    height: isTablet ? 100 : 80,
+    height: isTablet ? 120 : 100,
   },
   tableCardInner: {
     borderRadius: 12,
@@ -1095,14 +1490,29 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: '#ef4444',
   },
+  tableCardAnimating: {
+    opacity: 0.8,
+    transform: [{ scale: 0.98 }],
+    shadowColor: '#3b82f6',
+    shadowOffset: {
+      width: 0,
+      height: 0,
+    },
+    shadowOpacity: 0.8,
+    shadowRadius: 8,
+    elevation: 8,
+    borderWidth: 2,
+    borderColor: '#3b82f6',
+  },
   tableContent: {
     padding: isTablet ? 16 : 12,
     height: '100%',
     justifyContent: 'space-between',
+    paddingVertical: isTablet ? 12 : 8,
   },
   tableHeader: {
     alignItems: 'center',
-    marginBottom: 4,
+    marginBottom: 8,
   },
   tableNumber: {
     fontSize: isTablet ? 18 : 16,
@@ -1120,17 +1530,24 @@ const styles = StyleSheet.create({
     marginBottom: 4,
     flex: 1,
     justifyContent: 'center',
+    gap: 6,
   },
   tableInfoText: {
     fontSize: isTablet ? 12 : 10,
     marginBottom: 2,
     textAlign: 'center',
+    lineHeight: 16,
   },
   orderTotal: {
     fontSize: isTablet ? 14 : 12,
     fontWeight: '600',
     marginTop: 4,
     textAlign: 'center',
+  },
+  tableTotalInfo: {
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 2,
   },
   paidAmount: {
     color: '#10b981',
@@ -1143,9 +1560,7 @@ const styles = StyleSheet.create({
     marginLeft: 2,
   },
   modalContent: {
-    gap: 20,
-    paddingHorizontal: 16,
-    minWidth: isTablet ? 400 : 320,
+    gap: 16,
   },
   infoText: {
     fontSize: isTablet ? 16 : 14,
@@ -1193,7 +1608,7 @@ const styles = StyleSheet.create({
     fontSize: isTablet ? 16 : 14,
     color: '#374151',
     marginBottom: 16,
-    textAlign: 'left',
+    textAlign: 'center',
   },
   manualInputSection: {
     alignItems: 'center',
@@ -1250,10 +1665,13 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   paymentModalContent: {
-    gap: 16,
+    gap: 20,
+    paddingHorizontal: 8,
   },
   paymentInfo: {
-    gap: 4,
+    gap: 8,
+    alignItems: 'center',
+    marginBottom: 8,
   },
   paymentInfoText: {
     fontSize: isTablet ? 16 : 14,
@@ -1262,15 +1680,13 @@ const styles = StyleSheet.create({
   paymentLabel: {
     fontWeight: '600',
   },
-  paymentButtonsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 12,
-    marginTop: 16,
-    width: '100%',
+  remainingAmount: {
+    color: '#dc2626',
+    fontWeight: '600',
   },
   paymentOptions: {
-    gap: 12,
+    gap: 16,
+    alignItems: 'center',
   },
   paymentOptionsTitle: {
     fontSize: isTablet ? 18 : 16,
@@ -1278,40 +1694,29 @@ const styles = StyleSheet.create({
     color: '#374151',
     marginBottom: 4,
   },
-  paymentButton: {
-    marginBottom: 4,
-  },
+
   fullPaymentButton: {
-    paddingVertical: 12,
-    minHeight: 48,
-    flex: 1,
-    backgroundColor: '#3b82f6',
-  },
-  partialPaymentButton: {
-    paddingVertical: 12,
-    minHeight: 48,
-    flex: 1,
-    borderColor: '#3b82f6',
-    borderWidth: 2,
-  },
-  payButton: {
-    paddingVertical: 12,
-    minHeight: 48,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    minHeight: 52,
     width: '100%',
+    borderRadius: 8,
     backgroundColor: '#3b82f6',
+    borderWidth: 1,
+    borderColor: '#3b82f6',
   },
   partialPaymentSection: {
-    gap: 8,
-    alignItems: 'flex-start',
-    marginTop: 16,
+    gap: 12,
+    alignItems: 'center',
+    marginTop: 8,
   },
   partialPaymentLabel: {
     fontSize: isTablet ? 16 : 14,
     fontWeight: '600',
     color: '#374151',
     marginBottom: 4,
-    textAlign: 'left',
-    alignSelf: 'flex-start',
   },
   paymentInput: {
     fontSize: isTablet ? 16 : 14,
@@ -1323,21 +1728,21 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     backgroundColor: '#ffffff',
     width: '100%',
-    textAlign: 'left',
+    textAlign: 'center',
     minHeight: 48,
   },
   modalTitle: {
     fontSize: isTablet ? 20 : 18,
     fontWeight: 'bold',
     color: '#111827',
-    textAlign: 'left',
+    textAlign: 'center',
     marginBottom: 8,
-  },
-  refreshButton: {
-    marginRight: 8,
   },
   logoutButton: {
     marginLeft: 8,
+  },
+  refreshButton: {
+    marginRight: 8,
   },
   alertIndicator: {
     position: 'absolute',
@@ -1357,4 +1762,79 @@ const styles = StyleSheet.create({
     shadowRadius: 2,
     elevation: 3,
   },
-});
+  inputContainer: {
+    width: '100%',
+    alignItems: 'center',
+  },
+
+  paymentButtonText: {
+    color: '#ffffff',
+    fontSize: isTablet ? 16 : 14,
+    fontWeight: '600',
+    marginLeft: 8,
+  },
+  partialPaymentButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    minHeight: 52,
+    width: '100%',
+    borderRadius: 8,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#3b82f6',
+  },
+  partialPaymentButtonText: {
+    color: '#3b82f6',
+    fontSize: isTablet ? 16 : 14,
+    fontWeight: '600',
+    marginLeft: 8,
+  },
+  buttonIcon: {
+    marginRight: 8,
+  },
+  payButton: {
+    width: '100%',
+    paddingVertical: 14,
+    minHeight: 52,
+    borderRadius: 8,
+    backgroundColor: '#3b82f6',
+    borderWidth: 1,
+    borderColor: '#3b82f6',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  payButtonText: {
+    color: '#ffffff',
+    fontSize: isTablet ? 16 : 14,
+    fontWeight: '600',
+  },
+  paymentMethodSelector: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 16,
+    justifyContent: 'center',
+  },
+  paymentMethodButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    backgroundColor: '#ffffff',
+    borderWidth: 2,
+    borderColor: '#d1d5db',
+    minWidth: 100,
+  },
+  paymentMethodText: {
+    fontSize: isTablet ? 14 : 12,
+    fontWeight: '600',
+    color: '#374151',
+    marginLeft: 4,
+  },
+  closeTableButton: {
+    borderColor: '#10b981',
+  },
+}); 

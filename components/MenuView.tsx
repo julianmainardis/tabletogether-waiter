@@ -16,20 +16,30 @@ import { Card, CardContent } from './ui/card';
 import { Badge } from './ui/badge';
 import { ProductDetailDialog } from './ProductDetailDialog';
 import { productService, Product, Category } from '../services/productService';
+import { orderService } from '../services/orderService';
 
 interface MenuViewProps {
   tableId: number;
   diners: number;
-  isModifying?: boolean;
   currentOrder?: any[];
+  loadingCurrentOrder?: boolean;
   onBack: () => void;
   onConfirmOrder: (items: any[]) => void;
+  tableRealId?: string;
+  onRefresh?: () => void;
 }
 
 const { width: screenWidth } = Dimensions.get('window');
 const isTablet = screenWidth >= 768;
 
-// Definir iconos para cada categoría
+const formatCurrency = (amount: number): string => {
+  return new Intl.NumberFormat('es-ES', {
+    style: 'decimal',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  }).format(amount);
+};
+
 const categoryIcons: Record<string, string> = {
   'all': 'restaurant',
   'Entrantes': 'wine',
@@ -41,31 +51,35 @@ const categoryIcons: Record<string, string> = {
 export const MenuView: React.FC<MenuViewProps> = ({
   tableId,
   diners,
-  isModifying = false,
   currentOrder = [],
+  loadingCurrentOrder = false,
   onBack,
   onConfirmOrder,
+  tableRealId,
+  onRefresh,
 }) => {
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedItems, setSelectedItems] = useState<Record<string, number>>(() => {
-    // Si estamos modificando, inicializar con el pedido actual
-    if (isModifying && currentOrder.length > 0) {
+    if (currentOrder.length > 0) {
       console.log('Modificando pedido actual:', currentOrder);
       const initialItems: Record<string, number> = {};
       currentOrder.forEach(item => {
-        initialItems[item.id] = item.quantity;
+        const uniqueId = `${item.id}-${item.status || 'pending'}`;
+        initialItems[uniqueId] = item.quantity;
       });
       return initialItems;
     }
     return {};
   });
+  
+  // Almacenar customizations por productId
+  const [selectedCustomizations, setSelectedCustomizations] = useState<Record<string, string[]>>({});
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [showProductDetail, setShowProductDetail] = useState(false);
 
-  // Cargar productos y categorías
   useEffect(() => {
     const loadData = async () => {
       try {
@@ -79,7 +93,6 @@ export const MenuView: React.FC<MenuViewProps> = ({
         
         console.log('📦 Products loaded:', productsData.length);
         console.log('📂 Categories loaded:', categoriesData);
-        console.log('📂 Categories names:', categoriesData.map(cat => cat.name));
         
         setProducts(productsData);
         setCategories(categoriesData);
@@ -97,23 +110,13 @@ export const MenuView: React.FC<MenuViewProps> = ({
   }, []);
 
   const allCategories = ['all', ...categories.map(cat => cat.name)];
-  console.log('🏷️ All categories:', allCategories);
-  console.log('🔍 Selected category:', selectedCategory);
-  console.log('📦 Total products:', products.length);
-  console.log('📂 Categories from backend:', categories.map(cat => ({ id: cat.id, name: cat.name })));
-  console.log('🎯 About to render', allCategories.length, 'category buttons');
   
   const filteredProducts = selectedCategory === 'all' 
     ? products 
     : products.filter(product => {
         const productCategory = categories.find(cat => cat.id === product.category_id);
-        const matches = productCategory?.name === selectedCategory;
-        console.log(`Product ${product.name} - category_id: ${product.category_id} - category_name: ${productCategory?.name} - selected: ${selectedCategory} - matches: ${matches}`);
-        return matches;
+        return productCategory?.name === selectedCategory;
       });
-  
-  console.log('📋 Filtered products count:', filteredProducts.length);
-  console.log('📋 Filtered products:', filteredProducts.map(p => p.name));
 
   const addItem = (itemId: string) => {
     setSelectedItems(prev => ({
@@ -140,6 +143,27 @@ export const MenuView: React.FC<MenuViewProps> = ({
       delete newItems[itemId];
       return newItems;
     });
+    
+    // También limpiar customizations
+    setSelectedCustomizations(prev => {
+      const newCustomizations = { ...prev };
+      delete newCustomizations[itemId];
+      return newCustomizations;
+    });
+  };
+  
+  const validateSelectedItems = () => {
+    const items = getSelectedItemsList();
+    for (const item of items) {
+      const product = products.find(p => p.id === item.id);
+      if (product && product.customizations && product.customizations.length > 0) {
+        const hasRequiredCustomizations = product.customizations.some(c => c.is_required);
+        if (hasRequiredCustomizations && (!item.customizations || item.customizations.length === 0)) {
+          return { valid: false, message: `"${product.name}" requiere personalización` };
+        }
+      }
+    }
+    return { valid: true, message: '' };
   };
 
   const handleProductPress = (product: Product) => {
@@ -150,17 +174,38 @@ export const MenuView: React.FC<MenuViewProps> = ({
 
   const handleAddToOrder = (productId: string, quantity: number, customizations: string[]) => {
     console.log('📦 Adding to order:', productId, quantity, customizations);
+    
+    // Buscar el producto para verificar si tiene customizations obligatorias
+    const product = products.find(p => p.id === productId);
+    if (product && product.customizations && product.customizations.length > 0) {
+      const hasRequiredCustomizations = product.customizations.some(c => c.is_required);
+      
+      if (hasRequiredCustomizations && customizations.length === 0) {
+        Alert.alert('Error', 'Este producto requiere personalización. Por favor selecciona las opciones requeridas.');
+        return;
+      }
+    }
+    
     setSelectedItems(prev => ({
       ...prev,
       [productId]: (prev[productId] || 0) + quantity,
     }));
+    
+    // Almacenar customizations si las hay
+    if (customizations.length > 0) {
+      setSelectedCustomizations(prev => ({
+        ...prev,
+        [productId]: customizations,
+      }));
+    }
   };
 
   const getTotalPrice = () => {
-    return Object.entries(selectedItems).reduce((total, [itemId, quantity]) => {
+    const total = Object.entries(selectedItems).reduce((total, [itemId, quantity]) => {
       const item = products.find(i => i.id === itemId);
       return total + (item?.price || 0) * quantity;
     }, 0);
+    return Math.round(total * 100) / 100;
   };
 
   const getSelectedItemsList = () => {
@@ -170,12 +215,18 @@ export const MenuView: React.FC<MenuViewProps> = ({
       return {
         ...item,
         quantity,
+        customizations: selectedCustomizations[itemId] || [],
       };
     }).filter((item): item is NonNullable<typeof item> => item !== null);
   };
 
   const renderMenuItem = (product: Product) => {
     const quantity = selectedItems[product.id] || 0;
+    
+    // Verificar si el producto tiene customizations obligatorias
+    const hasRequiredCustomizations = product.customizations && 
+      product.customizations.length > 0 && 
+      product.customizations.some(c => c.is_required);
     
     return (
       <TouchableOpacity
@@ -188,13 +239,23 @@ export const MenuView: React.FC<MenuViewProps> = ({
           <CardContent style={styles.menuItemContent}>
             <View style={styles.menuItemHeader}>
               <View style={styles.menuItemInfo}>
-                <Text style={styles.menuItemName}>{product.name}</Text>
+                <View style={styles.productNameContainer}>
+                  <Text style={styles.menuItemName}>{product.name}</Text>
+                  {hasRequiredCustomizations && (
+                    <View style={styles.requiredBadge}>
+                      <Ionicons name="settings" size={12} color="#f59e0b" />
+                    </View>
+                  )}
+                </View>
                 {product.description && (
                   <Text style={styles.menuItemDescription} numberOfLines={2}>
                     {product.description}
                   </Text>
                 )}
-                <Text style={styles.menuItemPrice}>€{product.price.toFixed(2)}</Text>
+                <Text style={styles.menuItemPrice}>${formatCurrency(product.price)}</Text>
+                {hasRequiredCustomizations && (
+                  <Text style={styles.customizationHint}>Toca para personalizar</Text>
+                )}
               </View>
               <View style={styles.quantityControls}>
                 {quantity > 0 && (
@@ -208,17 +269,88 @@ export const MenuView: React.FC<MenuViewProps> = ({
                 {quantity > 0 && (
                   <Text style={styles.quantityText}>{quantity}</Text>
                 )}
-                <TouchableOpacity
-                  onPress={() => addItem(product.id)}
-                  style={styles.quantityButton}
-                >
-                  <Ionicons name="add" size={isTablet ? 24 : 20} color="#10b981" />
-                </TouchableOpacity>
               </View>
             </View>
           </CardContent>
         </Card>
       </TouchableOpacity>
+    );
+  };
+
+  const renderCurrentOrderItem = (item: any, index: number) => {
+    const isPending = item.status === 'pending';
+    const isProcessing = item.status === 'processing';
+    const statusColor = item.status === 'pending' ? '#f59e0b' : 
+                       item.status === 'processing' ? '#3b82f6' : 
+                       item.status === 'completed' ? '#10b981' : '#10b981';
+    
+    const statusText = item.status === 'pending' ? 'Pendiente' :
+                      item.status === 'processing' ? 'En preparación' :
+                      item.status === 'completed' ? 'Listo' : 'Entregado';
+
+    const handleRemoveItem = async () => {
+      try {
+        if (!tableRealId || !item.orderId || !item.itemId) {
+          Alert.alert('Error', 'No se puede eliminar este producto en este momento');
+          return;
+        }
+
+        // Eliminar el producto del pedido
+        await orderService.removeItem(tableRealId, item.orderId, item.itemId);
+        
+        Alert.alert('Éxito', 'Producto eliminado del pedido');
+        
+        // Llamar a onRefresh para actualizar la vista principal
+        if (onRefresh) {
+          onRefresh();
+        }
+        
+        // Recargar el pedido actual
+        if (onConfirmOrder) {
+          onConfirmOrder([]);
+        }
+        
+      } catch (error: any) {
+        console.error('Error eliminando producto:', error);
+        Alert.alert('Error', error.message || 'No se pudo eliminar el producto');
+      }
+    };
+
+    return (
+      <View style={styles.currentOrderItem}>
+        <View style={styles.currentOrderItemContent}>
+          <Text style={styles.currentOrderItemText}>
+            {item.name} x{item.quantity} - ${formatCurrency(item.price * item.quantity)}
+          </Text>
+          <View style={styles.currentOrderItemStatus}>
+            <View style={[styles.statusIndicator, { backgroundColor: statusColor }]} />
+            <Text style={[styles.statusText, { color: statusColor }]}>
+              {statusText}
+            </Text>
+          </View>
+        </View>
+        {isPending && (
+          <TouchableOpacity
+            onPress={() => {
+              Alert.alert(
+                'Eliminar producto',
+                `¿Estás seguro de que quieres eliminar "${item.name}" del pedido?`,
+                [
+                  { text: 'Cancelar', style: 'cancel' },
+                  { 
+                    text: 'Eliminar', 
+                    style: 'destructive',
+                    onPress: handleRemoveItem
+                  }
+                ]
+              );
+            }}
+            style={styles.removeCurrentOrderButton}
+          >
+            <Ionicons name="trash-outline" size={18} color="#ef4444" />
+          </TouchableOpacity>
+        )}
+      </View>
     );
   };
 
@@ -232,7 +364,7 @@ export const MenuView: React.FC<MenuViewProps> = ({
           </TouchableOpacity>
           <View style={styles.headerInfo}>
             <Text style={styles.headerTitle}>
-              {isModifying ? 'Modificar Pedido' : 'Menú'} - Mesa {tableId}
+              Modificar Pedido - Mesa {tableId}
             </Text>
             <Text style={styles.headerSubtitle}>{diners} comensales</Text>
           </View>
@@ -254,31 +386,39 @@ export const MenuView: React.FC<MenuViewProps> = ({
         </TouchableOpacity>
         <View style={styles.headerInfo}>
           <Text style={styles.headerTitle}>
-            {isModifying ? 'Modificar Pedido' : 'Menú'} - Mesa {tableId}
+            Modificar Pedido - Mesa {tableId}
           </Text>
           <Text style={styles.headerSubtitle}>{diners} comensales</Text>
         </View>
       </View>
 
-      {/* Sección de pedido actual (solo cuando se está modificando) */}
-      {isModifying && (
-        <View style={styles.currentOrderSection}>
-          <Text style={styles.currentOrderTitle}>Pedido Actual</Text>
-          {currentOrder.length > 0 ? (
-            currentOrder.map(item => (
-              <View key={item.id} style={styles.currentOrderItem}>
-                <Text style={styles.currentOrderItemText}>
-                  {item.name} x{item.quantity} - €{(item.price * item.quantity).toFixed(2)}
-                </Text>
+      <View style={styles.currentOrderSection}>
+        <Text style={styles.currentOrderTitle}>Pedido Actual</Text>
+        {loadingCurrentOrder ? (
+          <View style={styles.currentOrderLoadingContainer}>
+            <Text style={styles.currentOrderLoadingText}>Cargando pedido actual...</Text>
+          </View>
+        ) : (
+          currentOrder.length > 0 ? (
+            <ScrollView 
+              style={styles.currentOrderScrollView}
+              showsVerticalScrollIndicator={false}
+              nestedScrollEnabled={true}
+            >
+              <View style={styles.currentOrderGrid}>
+                {currentOrder.map((item, index) => (
+                  <View key={`${item.id}-${item.status}-${index}`} style={styles.currentOrderItemWrapper}>
+                    {renderCurrentOrderItem(item, index)}
+                  </View>
+                ))}
               </View>
-            ))
+            </ScrollView>
           ) : (
             <Text style={styles.noOrderText}>No hay pedido actual</Text>
-          )}
-        </View>
-      )}
+          )
+        )}
+      </View>
 
-      {/* Barra de categorías */}
       <View style={styles.categoriesSection}>
         <ScrollView 
           horizontal
@@ -298,7 +438,6 @@ export const MenuView: React.FC<MenuViewProps> = ({
                   isSelected && styles.selectedCategoryButton,
                 ]}
                 onPress={() => {
-                  console.log(`Category clicked: ${category}`);
                   setSelectedCategory(category);
                 }}
               >
@@ -323,7 +462,6 @@ export const MenuView: React.FC<MenuViewProps> = ({
         </ScrollView>
       </View>
 
-      {/* Lista de productos */}
       <View style={styles.productsContainer}>
         <ScrollView style={styles.menuList} showsVerticalScrollIndicator={false}>
           <View style={styles.menuGrid}>
@@ -340,7 +478,7 @@ export const MenuView: React.FC<MenuViewProps> = ({
         <View style={styles.orderSummary}>
           <View style={styles.orderHeader}>
             <Text style={styles.orderTitle}>Resumen del pedido</Text>
-            <Text style={styles.orderTotal}>€{getTotalPrice().toFixed(2)}</Text>
+            <Text style={styles.orderTotal}>${formatCurrency(getTotalPrice())}</Text>
           </View>
           
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.selectedItems}>
@@ -360,14 +498,25 @@ export const MenuView: React.FC<MenuViewProps> = ({
           </ScrollView>
           
           <Button
-            title={isModifying ? "Confirmar modificación" : "Confirmar pedido"}
-            onPress={() => onConfirmOrder(getSelectedItemsList())}
+            title="Confirmar modificación"
+            onPress={() => {
+              const validation = validateSelectedItems();
+              if (!validation.valid) {
+                Alert.alert('Error', validation.message);
+                return;
+              }
+              
+              onConfirmOrder(getSelectedItemsList());
+              // Llamar a onRefresh para actualizar la vista principal (igual que cuando se elimina)
+              if (onRefresh) {
+                onRefresh();
+              }
+            }}
             style={styles.confirmButton}
           />
         </View>
       )}
 
-      {/* Product Detail Dialog */}
       <ProductDetailDialog
         product={selectedProduct}
         isVisible={showProductDetail}
@@ -464,7 +613,7 @@ const styles = StyleSheet.create({
   },
   menuList: {
     flex: 1,
-    padding: isTablet ? 24 : 16,
+    padding: isTablet ? 20 : 12,
   },
   menuGrid: {
     flexDirection: isTablet ? 'row' : 'column',
@@ -474,7 +623,7 @@ const styles = StyleSheet.create({
   },
   menuItemWrapper: {
     width: isTablet ? '48%' : '100%',
-    marginBottom: 16,
+    marginBottom: 12,
   },
   menuItem: {
     width: '100%',
@@ -488,12 +637,12 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 3.84,
     elevation: 5,
-    height: isTablet ? 120 : 100,
-    minHeight: isTablet ? 120 : 100,
-    maxHeight: isTablet ? 120 : 100,
+    height: isTablet ? 100 : 80,
+    minHeight: isTablet ? 100 : 80,
+    maxHeight: isTablet ? 100 : 80,
   },
   menuItemContent: {
-    padding: isTablet ? 20 : 16,
+    padding: isTablet ? 16 : 12,
     flex: 1,
     justifyContent: 'space-between',
   },
@@ -511,20 +660,20 @@ const styles = StyleSheet.create({
     height: '100%',
   },
   menuItemName: {
-    fontSize: isTablet ? 18 : 16,
+    fontSize: isTablet ? 16 : 14,
     fontWeight: '600',
     color: '#111827',
-    marginBottom: 4,
+    marginBottom: 2,
   },
   menuItemDescription: {
-    fontSize: isTablet ? 14 : 12,
+    fontSize: isTablet ? 12 : 10,
     color: '#6b7280',
-    marginBottom: 8,
-    lineHeight: 18,
+    marginBottom: 4,
+    lineHeight: 16,
     flex: 1,
   },
   menuItemPrice: {
-    fontSize: isTablet ? 18 : 16,
+    fontSize: isTablet ? 16 : 14,
     fontWeight: 'bold',
     color: '#10b981',
     marginTop: 'auto',
@@ -602,15 +751,48 @@ const styles = StyleSheet.create({
   },
   currentOrderItem: {
     backgroundColor: '#ffffff',
-    padding: 8,
+    padding: 6,
     borderRadius: 6,
-    marginBottom: 6,
     borderLeftWidth: 3,
     borderLeftColor: '#3b82f6',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    minHeight: 60,
+  },
+  currentOrderItemContent: {
+    flex: 1,
+    marginLeft: 8,
   },
   currentOrderItemText: {
     fontSize: isTablet ? 14 : 12,
     color: '#374151',
+    marginBottom: 1,
+    lineHeight: 16,
+    fontWeight: '500',
+  },
+  currentOrderItemStatus: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  statusIndicator: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginRight: 6,
+  },
+  statusText: {
+    fontSize: isTablet ? 13 : 11,
+    fontWeight: '600',
+  },
+  removeCurrentOrderButton: {
+    padding: 10,
+    marginLeft: 6,
+    marginRight: 8,
+    borderRadius: 6,
+    backgroundColor: '#fef2f2',
+    borderWidth: 1,
+    borderColor: '#fecaca',
   },
   noOrderText: {
     fontSize: isTablet ? 14 : 12,
@@ -631,4 +813,59 @@ const styles = StyleSheet.create({
     width: '100%',
     marginBottom: 16,
   },
-});
+  currentOrderLoadingContainer: {
+    padding: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  currentOrderLoadingText: {
+    fontSize: 14,
+    color: '#6b7280',
+    fontStyle: 'italic',
+  },
+  currentOrderScrollView: {
+    maxHeight: 150,
+  },
+  moreProductsIndicator: {
+    width: '100%',
+    padding: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#f3f4f6',
+    borderRadius: 8,
+    marginTop: 8,
+  },
+  moreProductsText: {
+    fontSize: 14,
+    color: '#6b7280',
+    fontWeight: '500',
+  },
+  currentOrderGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+  },
+  currentOrderItemWrapper: {
+    width: '48%',
+    marginBottom: 6,
+  },
+  productNameContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 2,
+  },
+  requiredBadge: {
+    backgroundColor: '#fef3c7',
+    borderRadius: 8,
+    padding: 2,
+    marginLeft: 6,
+    borderWidth: 1,
+    borderColor: '#f59e0b',
+  },
+  customizationHint: {
+    fontSize: isTablet ? 10 : 9,
+    color: '#f59e0b',
+    fontStyle: 'italic',
+    marginTop: 2,
+  },
+}); 

@@ -13,6 +13,7 @@ export interface Table {
   hasAlerts?: boolean;
   sessionId?: string | null;
   occupiedTime?: Date;
+  realId?: string; // ID real de la mesa (UUID) para llamadas al API
 }
 
 export type AlertType = "order-ready" | "check-request" | "assistance-needed" | "waiter-call";
@@ -25,6 +26,19 @@ export interface TableAlert {
   timestamp: Date;
   priority: "low" | "medium" | "high";
   resolved: boolean;
+}
+
+export interface TableOrderUpdate {
+  tableNumber: number;
+  orderId: string;
+  total: number;
+  message: string;
+}
+
+export interface TableStatusUpdate {
+  tableNumber: number;
+  userName: string;
+  message: string;
 }
 
 export interface OrderItem {

@@ -4,17 +4,33 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { waiterAuthService } from './waiterAuth';
 
 const API_BASE_URL = Constants.expoConfig?.extra?.apiUrl || 'http://localhost:3000/api';
-const WS_BASE_URL = API_BASE_URL.replace('/api', '');
+const WS_BASE_URL = API_BASE_URL.replace('/api', '') || 'http://localhost:3000';
 
 export interface TableAlert {
   alertId: string;
   tableId: string;
   tableNumber: number;
-  alertType: 'waiter-call' | 'order-ready' | 'check-request' | 'assistance-needed';
+  alertType: 'waiter-call' | 'order-ready' | 'check-request' | 'assistance-needed' | 'new-order' | 'table-occupied';
   message: string;
   priority: 'low' | 'medium' | 'high';
   timestamp: Date;
   resolved: boolean;
+  orderId?: string;
+  total?: string;
+  userName?: string;
+}
+
+export interface TableOrderUpdate {
+  tableNumber: number;
+  orderId: string;
+  total: number;
+  message: string;
+}
+
+export interface TableStatusUpdate {
+  tableNumber: number;
+  userName: string;
+  message: string;
 }
 
 class AlertsService {
@@ -26,7 +42,11 @@ class AlertsService {
   private alerts: TableAlert[] = [];
 
   constructor() {
-    this.loadAlertsFromStorage();
+    this.initializeSocket();
+    this.loadAlertsFromStorage().then(() => {
+      // Validar alertas después de cargarlas
+      this.validateOrderReadyAlerts();
+    });
   }
 
   private async loadAlertsFromStorage() {
@@ -34,23 +54,24 @@ class AlertsService {
       const storedAlerts = await AsyncStorage.getItem('waiter_alerts');
       if (storedAlerts) {
         const parsedAlerts = JSON.parse(storedAlerts);
-        console.log('🔍 Alertas encontradas en almacenamiento:', parsedAlerts.length);
-        console.log('🔍 Detalle de alertas:', parsedAlerts.map((a: any) => ({
-          id: a.alertId,
-          resolved: a.resolved,
-          message: a.message
-        })));
-        
-        // Solo cargar alertas no resueltas
-        const activeAlerts = parsedAlerts.filter((alert: any) => !alert.resolved);
+
+        // Filtrar alertas antiguas (más de 24 horas)
+        const oneDayAgo = new Date();
+        oneDayAgo.setDate(oneDayAgo.getDate() - 1);
+
+        const recentAlerts = parsedAlerts.filter((alert: any) => {
+          const alertDate = new Date(alert.timestamp);
+          return alertDate > oneDayAgo;
+        });
+
+        const activeAlerts = recentAlerts.filter((alert: any) => !alert.resolved);
         this.alerts = activeAlerts.map((alert: any) => ({
           ...alert,
           timestamp: new Date(alert.timestamp)
         }));
-        console.log('📋 Alertas activas cargadas desde almacenamiento:', this.alerts.length);
-        console.log('🗑️ Alertas resueltas filtradas:', parsedAlerts.length - this.alerts.length);
-      } else {
-        console.log('📭 No hay alertas almacenadas');
+
+        // Guardar las alertas limpias de vuelta al almacenamiento
+        await AsyncStorage.setItem('waiter_alerts', JSON.stringify(recentAlerts));
       }
     } catch (error) {
       console.error('❌ Error cargando alertas desde almacenamiento:', error);
@@ -59,43 +80,23 @@ class AlertsService {
 
   private async saveAlertsToStorage() {
     try {
-      console.log('💾 Guardando alertas en almacenamiento:', this.alerts.length);
-      console.log('💾 Detalle de alertas a guardar:', this.alerts.map(a => ({
-        id: a.alertId,
-        resolved: a.resolved,
-        message: a.message
-      })));
       
+
       await AsyncStorage.setItem('waiter_alerts', JSON.stringify(this.alerts));
-      console.log('✅ Alertas guardadas en almacenamiento:', this.alerts.length);
-    } catch (error) {
+      } catch (error) {
       console.error('❌ Error guardando alertas en almacenamiento:', error);
     }
   }
 
   private initializeSocket() {
     try {
-      console.log('🔌 Inicializando conexión WebSocket...');
-      console.log('🌐 URL del WebSocket:', WS_BASE_URL);
-      
-      // Verificar que tenemos datos de autenticación
-      const auth = waiterAuthService.getCurrentAuth();
-      if (!auth) {
-        console.warn('⚠️ No hay datos de autenticación disponibles');
-        return;
-      }
-      
       this.socket = io(WS_BASE_URL, {
         path: '/socket.io',
-        transports: ['websocket'],
+        transports: ['websocket', 'polling'],
         timeout: 20000,
         reconnection: true,
         reconnectionAttempts: this.maxReconnectAttempts,
         reconnectionDelay: this.reconnectDelay,
-        auth: {
-          token: auth.token,
-          type: 'waiter'
-        }
       });
 
       this.setupEventListeners();
@@ -108,44 +109,43 @@ class AlertsService {
     if (!this.socket) return;
 
     this.socket.on('connect', () => {
-      console.log('✅ Conectado al servidor de alertas');
       this.isConnected = true;
       this.reconnectAttempts = 0;
-      
+
       // Unirse a la sala de camareros
       const auth = waiterAuthService.getCurrentAuth();
-      console.log('🔍 Verificando autenticación para unirse a sala:', auth);
-      
+
       if (auth) {
-        console.log('👤 Usuario autenticado:', auth.user);
         this.joinWaiterRoom(auth.user.id);
       } else {
-        console.warn('⚠️ No hay autenticación, usando ID por defecto');
         this.joinWaiterRoom('waiter-default');
       }
     });
 
     this.socket.on('disconnect', () => {
-      console.log('❌ Desconectado del servidor de alertas');
       this.isConnected = false;
     });
 
     this.socket.on('connected', (data) => {
-      console.log('🎉 Conectado al sistema de alertas:', data);
+      // Conectado al sistema de alertas
     });
 
     this.socket.on('joined-waiter-room', (data) => {
-      console.log('👨‍💼 Unido a la sala de camareros:', data);
+      // Unido a la sala de camareros
     });
 
     this.socket.on('new-alert', (alert: TableAlert) => {
-      console.log('🚨 Nueva alerta recibida:', alert);
       this.handleNewAlert(alert);
     });
 
     this.socket.on('alert-resolved', (data) => {
-      console.log('✅ Alerta resuelta:', data);
       this.handleAlertResolved(data.alertId);
+    });
+
+    this.socket.on('order:mark-delivered-response', (data) => {
+      if (!data.success) {
+        console.error('❌ Error marcando pedido como entregado:', data.error);
+      }
     });
 
     this.socket.on('connect_error', (error) => {
@@ -154,7 +154,6 @@ class AlertsService {
     });
 
     this.socket.on('reconnect', (attemptNumber) => {
-      console.log(`🔄 Reconectado después de ${attemptNumber} intentos`);
       this.isConnected = true;
     });
 
@@ -164,36 +163,55 @@ class AlertsService {
   }
 
   private handleNewAlert(alert: TableAlert) {
-    // Aquí puedes implementar la lógica para mostrar notificaciones
-    // Por ejemplo, usar expo-notifications o mostrar un modal
-    
-    // Por ahora, solo logueamos la alerta
-    console.log(`🚨 ALERTA: Mesa ${alert.tableNumber} - ${alert.message}`);
-    
-    // Agregar la alerta a la lista local
+    // Manejo específico para diferentes tipos de alerta
+    switch (alert.alertType) {
+      case 'new-order':
+        // Para alertas de nuevo pedido, NO las guardamos como alertas persistentes
+        // Solo emitimos el evento para actualizar la información de la mesa
+        this.emitCustomEvent('new-table-alert', alert);
+        this.emitCustomEvent('table-order-updated', {
+          tableNumber: alert.tableNumber,
+          orderId: alert.orderId,
+          total: alert.total,
+          message: alert.message
+        });
+        return; // Salir sin guardar la alerta
+      case 'table-occupied':
+        this.emitCustomEvent('new-table-alert', alert);
+        this.emitCustomEvent('table-status-updated', {
+          tableNumber: alert.tableNumber,
+          userName: alert.userName,
+          message: alert.message
+        });
+        
+        return; // Salir sin guardar la alerta
+
+      case 'order-ready':
+        break;
+      case 'waiter-call':
+        break;
+      default:
+        break;
+    }
+
+    // Agregar la alerta a la lista local (solo para alertas que requieren atención)
     this.alerts.push(alert);
     this.saveAlertsToStorage();
-    
+
     // Emitir evento personalizado para que otros componentes puedan escuchar
-    // En React Native usamos un sistema de eventos personalizado
     this.emitCustomEvent('new-table-alert', alert);
   }
 
   private handleAlertResolved(alertId: string) {
-    console.log(`✅ Alerta ${alertId} resuelta desde servidor`);
-    console.log(`📋 Alertas antes de marcar como resuelta: ${this.alerts.length}`);
-    
     // Marcar la alerta como resuelta en lugar de eliminarla
-    this.alerts = this.alerts.map(alert => 
+    this.alerts = this.alerts.map(alert =>
       alert.alertId === alertId ? { ...alert, resolved: true } : alert
     );
     this.saveAlertsToStorage();
-    
-    console.log(`📋 Alertas después de marcar como resuelta: ${this.alerts.length}`);
-    
+
     // Limpiar alertas resueltas del almacenamiento
     this.cleanupResolvedAlertsFromStorage();
-    
+
     // Emitir evento personalizado
     this.emitCustomEvent('alert-resolved', { alertId });
   }
@@ -212,51 +230,29 @@ class AlertsService {
   public async cleanupResolvedAlerts() {
     const oneDayAgo = new Date();
     oneDayAgo.setDate(oneDayAgo.getDate() - 1);
-    
-    this.alerts = this.alerts.filter(alert => 
+
+    this.alerts = this.alerts.filter(alert =>
       !alert.resolved || alert.timestamp > oneDayAgo
     );
-    
+
     await this.saveAlertsToStorage();
   }
 
-  // Método para limpiar completamente las alertas resueltas del almacenamiento
   public async cleanupResolvedAlertsFromStorage() {
     try {
       const storedAlerts = await AsyncStorage.getItem('waiter_alerts');
       if (storedAlerts) {
         const parsedAlerts = JSON.parse(storedAlerts);
-        console.log('🧹 Alertas en almacenamiento antes de limpiar:', parsedAlerts.length);
-        
-        // Solo mantener alertas no resueltas
+
         const activeAlerts = parsedAlerts.filter((alert: any) => !alert.resolved);
-        
-        console.log('🧹 Alertas activas después de filtrar:', activeAlerts.length);
-        
-        // Guardar solo las alertas activas
+
         await AsyncStorage.setItem('waiter_alerts', JSON.stringify(activeAlerts));
-        console.log('🧹 Limpieza de almacenamiento completada. Alertas activas:', activeAlerts.length);
       }
     } catch (error) {
       console.error('❌ Error limpiando alertas resueltas del almacenamiento:', error);
     }
   }
 
-  // Método para verificar el estado del almacenamiento
-  public async debugStorage() {
-    try {
-      const storedAlerts = await AsyncStorage.getItem('waiter_alerts');
-      if (storedAlerts) {
-        const parsedAlerts = JSON.parse(storedAlerts);
-        console.log('🔍 DEBUG - Alertas en almacenamiento:', parsedAlerts.length);
-        console.log('🔍 DEBUG - Detalle completo:', parsedAlerts);
-      } else {
-        console.log('🔍 DEBUG - No hay alertas en almacenamiento');
-      }
-    } catch (error) {
-      console.error('❌ Error en debugStorage:', error);
-    }
-  }
 
   // Método para limpiar completamente el almacenamiento (para testing)
   public async clearAllAlerts() {
@@ -269,26 +265,53 @@ class AlertsService {
     }
   }
 
-  // Método temporal para forzar limpieza de alertas resueltas (para testing)
-  public async forceCleanupResolved() {
-    console.log('🧹 Forzando limpieza de alertas resueltas...');
-    await this.cleanupResolvedAlertsFromStorage();
-    await this.debugStorage();
+  // Método para limpiar alertas de order-ready que no tienen pedidos correspondientes
+  public async validateOrderReadyAlerts() {
+    try {
+      const orderReadyAlerts = this.alerts.filter(alert => alert.alertType === 'order-ready');
+
+      if (orderReadyAlerts.length === 0) {
+        return;
+      }
+
+      // Limpiar alertas de order-ready antiguas (más de 1 hora)
+      const oneHourAgo = new Date();
+      oneHourAgo.setHours(oneHourAgo.getHours() - 1);
+
+      const validOrderReadyAlerts = orderReadyAlerts.filter(alert => {
+        const alertDate = new Date(alert.timestamp);
+        return alertDate > oneHourAgo;
+      });
+
+      // Actualizar la lista de alertas
+      this.alerts = this.alerts.filter(alert => {
+        if (alert.alertType === 'order-ready') {
+          const alertDate = new Date(alert.timestamp);
+          return alertDate > oneHourAgo;
+        }
+        return true; // Mantener otras alertas
+      });
+
+      // Guardar cambios
+      await this.saveAlertsToStorage();
+
+    } catch (error) {
+      console.error('❌ Error validando alertas order-ready:', error);
+    }
   }
+
+
 
   // Método para limpiar completamente y recargar (más agresivo)
   public async forceCleanAndReload() {
-    console.log('🧹 Limpieza completa y recarga...');
-    
     // Limpiar almacenamiento
     await this.cleanupResolvedAlertsFromStorage();
-    
+
     // Recargar desde almacenamiento limpio
     await this.loadAlertsFromStorage();
-    
-    console.log('📋 Alertas después de limpieza completa:', this.alerts.length);
-    await this.debugStorage();
   }
+
+
 
   // Sistema de eventos personalizado para React Native
   private eventListeners: Map<string, Function[]> = new Map();
@@ -325,37 +348,18 @@ class AlertsService {
 
   public joinWaiterRoom(waiterId: string) {
     if (this.socket && this.isConnected) {
-      console.log(`👨‍💼 Uniéndose a la sala de camareros como ${waiterId}`);
       this.socket.emit('join-waiter-room', { waiterId });
-    } else {
-      console.warn('⚠️ Socket no conectado, intentando reconectar...');
-      console.log('🔍 Estado del socket:', {
-        socketExists: !!this.socket,
-        isConnected: this.isConnected,
-        socketConnected: this.socket?.connected
-      });
-      
-      // Intentar reconectar si no está conectado
-      this.initializeSocketConnection();
-      
-      // Esperar un poco y volver a intentar unirse a la sala
-      setTimeout(() => {
-        if (this.socket && this.isConnected) {
-          console.log(`👨‍💼 Reintentando unirse a la sala de camareros como ${waiterId}`);
-          this.socket.emit('join-waiter-room', { waiterId });
-        } else {
-          console.error('❌ No se pudo conectar el socket después del reintento');
-        }
-      }, 2000);
     }
   }
 
   public createAlert(alertData: {
     tableId: string;
     tableNumber: number;
-    alertType: 'waiter-call' | 'order-ready' | 'check-request' | 'assistance-needed';
+    alertType: 'waiter-call' | 'order-ready' | 'check-request' | 'assistance-needed' | 'new-order';
     message: string;
     priority: 'low' | 'medium' | 'high';
+    orderId?: string;
+    total?: number;
   }): Promise<{ success: boolean; alertId: string }> {
     return new Promise((resolve, reject) => {
       if (!this.socket || !this.isConnected) {
@@ -380,103 +384,100 @@ class AlertsService {
         return;
       }
 
-      console.log(`🔄 Iniciando resolución de alerta: ${alertId}`);
-      console.log(`📋 Alertas antes de resolver: ${this.alerts.length}`);
-
       // Encontrar la alerta para verificar su tipo
       const alert = this.alerts.find(a => a.alertId === alertId);
-      
-      this.socket.emit('resolve-alert', { alertId }, (response: any) => {
-        if (response.success) {
-          console.log(`✅ Servidor confirmó resolución de alerta: ${alertId}`);
+
+      // Configurar listener temporal para la respuesta
+      const onAlertResolved = (response: any) => {
+        if (response.alertId === alertId) {
+          this.socket!.off('alert-resolved', onAlertResolved);
           
-          // Marcar la alerta como resuelta en lugar de eliminarla
-          this.alerts = this.alerts.map(a => 
+          this.alerts = this.alerts.map(a =>
             a.alertId === alertId ? { ...a, resolved: true } : a
           );
-          console.log(`📋 Alertas después de marcar como resuelta: ${this.alerts.length}`);
-          
+
           // Guardar estado actualizado
           this.saveAlertsToStorage();
-          
+
           // Limpiar alertas resueltas del almacenamiento
           this.cleanupResolvedAlertsFromStorage();
-          
-          // Verificar estado final
-          this.debugStorage();
-          
-          // Si es una alerta de pedido listo, también actualizar el estado del pedido
-          if (alert && alert.alertType === 'order-ready') {
-            this.updateOrderToDelivered(alert.tableId);
+
+          // Si es una alerta de pedido listo, actualizar el estado del pedido
+          if (alert && alert.alertType === 'order-ready' && alert.orderId) {
+            // Llamar al endpoint de prueba
+            this.markOrderAsDelivered(alert.orderId).catch(error => {
+              console.error('❌ Error al marcar pedido como entregado:', error);
+            });
           }
-          
-          resolve(response);
-        } else {
-          console.error(`❌ Error del servidor al resolver alerta: ${alertId}`);
-          reject(new Error('Error al resolver alerta'));
+
+          resolve({ success: true });
         }
+      };
+
+      this.socket.on('alert-resolved', onAlertResolved);
+      
+      // Emitir el evento sin callback
+      this.socket.emit('resolve-alert', {
+        alertId,
+        alertType: alert?.alertType,
+        orderId: alert?.orderId,
+        tableId: alert?.tableId
       });
+
+      // Timeout de seguridad
+      setTimeout(() => {
+        this.socket!.off('alert-resolved', onAlertResolved);
+        reject(new Error('Timeout al resolver alerta'));
+      }, 5000);
     });
   }
 
-  private updateOrderToDelivered(tableId: string) {
-    if (!this.socket || !this.isConnected) {
-      console.error('Socket no conectado para actualizar pedido');
-      return;
-    }
+  private async markOrderAsDelivered(orderId: string) {
+    try {
+      const auth = waiterAuthService.getCurrentAuth();
 
-    console.log(`🔄 Enviando evento para marcar pedido como entregado para mesa: ${tableId}`);
-
-    // Enviar evento para marcar el pedido como entregado
-    this.socket.emit('order:mark-delivered', { tableId }, (response: any) => {
-      if (response.success) {
-        console.log('✅ Pedido marcado como entregado para mesa:', tableId);
-      } else {
-        console.error('❌ Error marcando pedido como entregado:', response.error);
+      if (!auth?.token) {
+        return;
       }
-    });
+
+      const url = `${API_BASE_URL}/kitchen/orders/${orderId}/status`;
+
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${auth.token}`
+        },
+        body: JSON.stringify({
+          status: 'delivered'
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.text();
+        console.error('Error marcando pedido como entregado:', response.statusText, errorData);
+      }
+    } catch (error) {
+      console.error('Error en markOrderAsDelivered:', error);
+    }
   }
 
   public isConnectedToServer(): boolean {
     return this.isConnected;
   }
 
-  public getConnectionStatus(): {
-    isConnected: boolean;
-    socketExists: boolean;
-    socketConnected: boolean;
-    hasAuth: boolean;
-    url: string;
-  } {
-    const auth = waiterAuthService.getCurrentAuth();
+  public getConnectionStatus() {
     return {
       isConnected: this.isConnected,
-      socketExists: !!this.socket,
-      socketConnected: this.socket?.connected || false,
-      hasAuth: !!auth,
-      url: WS_BASE_URL
+      hasSocket: !!this.socket,
+      socketConnected: this.socket?.connected,
+      wsUrl: WS_BASE_URL,
+      apiUrl: API_BASE_URL
     };
-  }
-
-  public initializeSocketConnection(): void {
-    // Verificar que tenemos autenticación antes de conectar
-    const auth = waiterAuthService.getCurrentAuth();
-    if (!auth) {
-      console.warn('⚠️ No hay autenticación disponible para conectar el socket');
-      return;
-    }
-    
-    if (!this.socket || !this.isConnected) {
-      console.log('🔌 Inicializando conexión WebSocket...');
-      this.initializeSocket();
-    } else {
-      console.log('🔌 Socket ya está conectado');
-    }
   }
 
   public disconnect() {
     if (this.socket) {
-      console.log('🔌 Desconectando del servidor de alertas');
       this.socket.disconnect();
       this.socket = null;
       this.isConnected = false;
@@ -484,12 +485,11 @@ class AlertsService {
   }
 
   public reconnect() {
-    console.log('🔄 Intentando reconectar...');
     this.disconnect();
     setTimeout(() => {
-      this.initializeSocketConnection();
+      this.initializeSocket();
     }, 1000);
   }
 }
 
-export const alertsService = new AlertsService();
+export const alertsService = new AlertsService(); 

@@ -9,6 +9,10 @@ interface ModalProps {
 }
 
 const Modal: React.FC<ModalProps> = ({ visible, onClose, title, children }) => {
+  const handleModalPress = (e: any) => {
+    e.stopPropagation();
+  };
+
   return (
     <RNModal
       visible={visible}
@@ -24,9 +28,9 @@ const Modal: React.FC<ModalProps> = ({ visible, onClose, title, children }) => {
         <TouchableOpacity 
           style={styles.modal} 
           activeOpacity={1}
-          onPress={(e) => e.stopPropagation()}
+          onPress={handleModalPress}
         >
-          {title && title.trim() !== "" && (
+          {title && (
             <View style={styles.header}>
               <View style={styles.closeButtonPlaceholder} />
               <Text style={styles.title}>{title}</Text>
