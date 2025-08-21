@@ -60,14 +60,10 @@ export default function TableManagement() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [timeUpdate, setTimeUpdate] = useState(0);
 
- 
-
-
-
   // Convertir datos reales del backend al formato de la aplicación
   useEffect(() => {
     if (realTables.length > 0) {
-      
+
       const convertedTables: Table[] = realTables.map((realTable: RealTableStatus) => {
         const convertedTable = {
           id: realTable.number, // Mantener el número para la UI
@@ -85,13 +81,13 @@ export default function TableManagement() {
           timeOccupied: realTable.timeOccupied,
           realId: realTable.id // Agregar el ID real para usar en las llamadas al API
         };
-        
 
-     
-        
+
+
+
         return convertedTable;
       });
-      
+
       setTables(convertedTables);
     }
   }, [realTables, user]);
@@ -109,17 +105,17 @@ export default function TableManagement() {
   useEffect(() => {
     // Conectar socket
     socketService.connect();
-    
+
     // Configurar listener para actualizar cuando se modifica un pedido
     socketService.onOrderModified(() => {
       refreshTables();
-      
+
       // Si estamos en la vista de modificar pedido, recargar el pedido actual
       if (selectedTableForMenu) {
         loadCurrentOrder(selectedTableForMenu);
       }
     });
-    
+
     // Cargar alertas existentes al iniciar (excluyendo 'new-order')
     const existingAlerts = alertsService.getActiveAlerts();
     if (existingAlerts.length > 0) {
@@ -136,11 +132,11 @@ export default function TableManagement() {
         }));
       setAlerts(mappedAlerts);
     }
-    
+
     const handleNewAlert = (alert: any) => {
       // Manejo especial para alertas de nuevo pedido
       if (alert.alertType === 'new-order') {
-     
+
         // Actualizar automáticamente la información de la mesa
         handleTableOrderUpdate({
           tableNumber: alert.tableNumber,
@@ -148,11 +144,11 @@ export default function TableManagement() {
           total: alert.total,
           message: alert.message
         });
-        
+
         // NO agregar como alerta que requiera atención
         return;
       }
-      
+
       // Para otros tipos de alerta, agregar normalmente (excluyendo 'new-order' y 'table-occupied')
       if (alert.alertType !== 'new-order' && alert.alertType !== 'table-occupied') {
         const newAlert = {
@@ -164,7 +160,7 @@ export default function TableManagement() {
           priority: alert.priority,
           resolved: alert.resolved
         };
-        
+
         setAlerts(prev => {
           const updated = [...prev, newAlert];
           return updated;
@@ -174,16 +170,16 @@ export default function TableManagement() {
 
     const handleAlertResolved = (data: any) => {
       const { alertId } = data;
-      
+
       // Marcar la alerta como resuelta
-      setAlerts(prev => prev.map(alert => 
+      setAlerts(prev => prev.map(alert =>
         alert.id === alertId ? { ...alert, resolved: true } : alert
       ));
     };
 
-  
 
-    
+
+
     // Agregar event listeners usando el servicio de alertas
     alertsService.addEventListener('new-table-alert', handleNewAlert);
     alertsService.addEventListener('alert-resolved', handleAlertResolved);
@@ -257,13 +253,14 @@ export default function TableManagement() {
       console.log(`💳 Procesando pago para mesa ${tableId}:`, {
         amount,
         isFullPayment,
+        paymentMethod: selectedPaymentMethod,
         currentPaidAmount: realTable.paidAmount || 0,
         orderTotal: realTable.orderTotal || 0
       });
 
       // Usar el nuevo servicio de pagos
       const paymentResult = await paymentService.processTablePayment(realTable.id, amount, 'card');
-      
+
       console.log(`✅ Resultado del pago:`, paymentResult);
 
       // Actualizar inmediatamente el estado local con la información del pago
@@ -293,7 +290,7 @@ export default function TableManagement() {
       // Mostrar confirmación al usuario
       Alert.alert(
         "Pago Exitoso",
-        `Se procesó el pago de $${amount.toFixed(2)}.\n${paymentResult.message}`,
+        `Se procesó el pago de $${amount.toFixed(2)} con ${selectedPaymentMethod === 'cash' ? 'efectivo' : 'tarjeta'}.\n${paymentResult.message}`,
         [{ text: "OK" }]
       );
 
@@ -330,7 +327,7 @@ export default function TableManagement() {
     try {
       // Animar la mesa para indicar que se actualizó
       setAnimatingTables(prev => new Set([...prev, tableNumber.toString()]));
-      
+
       // Remover la animación después de 2 segundos
       setTimeout(() => {
         setAnimatingTables(prev => {
@@ -361,7 +358,7 @@ export default function TableManagement() {
     try {
       // Animar la mesa para indicar que se actualizó
       setAnimatingTables(prev => new Set([...prev, tableNumber.toString()]));
-      
+
       // Remover la animación después de 2 segundos
       setTimeout(() => {
         setAnimatingTables(prev => {
@@ -390,7 +387,7 @@ export default function TableManagement() {
     try {
       console.log(`🔄 Resolviendo alerta: ${alertId}`);
       await alertsService.resolveAlert(alertId);
-      
+
       // Recargar alertas activas después de resolver
       const updatedAlerts = alertsService.getActiveAlerts();
       const mappedAlerts = updatedAlerts
@@ -404,7 +401,7 @@ export default function TableManagement() {
           priority: alert.priority,
           resolved: alert.resolved
         }));
-      
+
       setAlerts(mappedAlerts);
       console.log(`✅ Alerta ${alertId} resuelta y lista actualizada`);
     } catch (error) {
@@ -416,20 +413,20 @@ export default function TableManagement() {
     if (!timestamp || !(timestamp instanceof Date) || isNaN(timestamp.getTime())) {
       return 'Reciente';
     }
-    
+
     const now = new Date();
     const diffInMinutes = Math.floor((now.getTime() - timestamp.getTime()) / (1000 * 60));
-    
+
     if (diffInMinutes < 1) return 'Ahora';
     if (diffInMinutes < 60) return `${diffInMinutes}m`;
-    
+
     const hours = Math.floor(diffInMinutes / 60);
     const minutes = diffInMinutes % 60;
-    
+
     if (hours < 24) {
       return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`;
     }
-    
+
     const days = Math.floor(hours / 24);
     return `${days}d`;
   };
@@ -474,13 +471,63 @@ export default function TableManagement() {
       setSelectedDiners(2);
       setManualDiners('');
       setValidationError('');
-      
+
       // Refrescar los datos del backend
       await refreshTables();
 
     } catch (error) {
       console.error('Error assigning table:', error);
       // Mostrar error al usuario si es necesario
+    }
+  };
+
+  const handleCloseTableManually = async (tableId: number) => {
+    try {
+      // Encontrar la mesa en los datos reales del backend
+      const realTable = realTables.find(t => t.number === tableId);
+      if (!realTable) {
+        console.error('Table not found in backend data');
+        return;
+      }
+
+      // Confirmar la acción con el usuario
+      Alert.alert(
+        "Cerrar Mesa",
+        "¿Estás seguro de que quieres cerrar esta mesa manualmente? Esta acción no se puede deshacer.",
+        [
+          { text: "Cancelar", style: "cancel" },
+          {
+            text: "Cerrar Mesa",
+            style: "destructive",
+            onPress: async () => {
+              try {
+                const result = await tableService.closeTableManually(realTable.id);
+
+                if (result.success) {
+                  Alert.alert(
+                    "Mesa Cerrada",
+                    "La mesa ha sido cerrada exitosamente.",
+                    [{ text: "OK" }]
+                  );
+
+                  // Cerrar el modal y refrescar datos
+                  setShowTableModal(false);
+                  await refreshTables();
+                } else {
+                  Alert.alert("Error", result.message || "No se pudo cerrar la mesa");
+                }
+              } catch (error) {
+                console.error('Error closing table:', error);
+                Alert.alert("Error", "No se pudo cerrar la mesa");
+              }
+            }
+          }
+        ]
+      );
+
+    } catch (error) {
+      console.error('Error preparing to close table:', error);
+      Alert.alert("Error", "No se pudo procesar la solicitud");
     }
   };
 
@@ -496,7 +543,7 @@ export default function TableManagement() {
     try {
       setLoadingCurrentOrder(true);
       console.log('🔄 Cargando pedido actual para mesa:', tableId);
-      
+
       // Encontrar la mesa para obtener el realId
       const table = tables.find(t => t.id === tableId);
       if (!table || !table.realId) {
@@ -504,19 +551,19 @@ export default function TableManagement() {
         Alert.alert('Error', 'No se pudo identificar la mesa');
         return;
       }
-      
+
       console.log('🔍 Usando realId para la mesa:', table.realId);
       const orderData = await orderService.getOrdersByTableId(table.realId);
       console.log('📦 Pedido actual cargado:', orderData);
-      
+
       // El backend devuelve groupedOrders, necesitamos extraer los items de ahí
       let currentOrderItems: any[] = [];
-      
+
       if (orderData && orderData.groupedOrders) {
         // Extraer todos los productos de todos los grupos de órdenes
-        currentOrderItems = orderData.groupedOrders.flatMap(group => 
-          group.products.flatMap(product => 
-            product.variations.flatMap(variation => 
+        currentOrderItems = orderData.groupedOrders.flatMap(group =>
+          group.products.flatMap(product =>
+            product.variations.flatMap(variation =>
               variation.orderDetails.map(detail => ({
                 id: `${product.product.name}-${group.status}`, // ID único con estado
                 name: product.product.name,
@@ -532,12 +579,12 @@ export default function TableManagement() {
           )
         );
       }
-      
+
       setTableOrders(prev => ({
         ...prev,
         [tableId]: currentOrderItems
       }));
-      
+
     } catch (error) {
       console.error('❌ Error cargando pedido actual:', error);
       Alert.alert('Error', 'No se pudo cargar el pedido actual');
@@ -592,7 +639,7 @@ export default function TableManagement() {
 
         // Calcular el monto restante usando los datos reales del backend
         const remainingAmount = (realTable.orderTotal || 0) - (realTable.paidAmount || 0);
-        
+
         console.log(`💰 Calculando pago completo:`, {
           orderTotal: realTable.orderTotal,
           paidAmount: realTable.paidAmount,
@@ -623,10 +670,10 @@ export default function TableManagement() {
 
         // Obtener los productos que están en el pedido actual
         const currentOrderItems = tableOrders[selectedTableForMenu] || [];
-        
+
         // Filtrar solo los productos que están en estado 'pending' (nuevos)
-        const newItems = items.filter(item => 
-          !currentOrderItems.some(currentItem => 
+        const newItems = items.filter(item =>
+          !currentOrderItems.some(currentItem =>
             currentItem.id === item.id && currentItem.status === 'pending'
           )
         );
@@ -639,7 +686,7 @@ export default function TableManagement() {
               action: 'add' as const,
               productId: String(item.id),
               quantity: item.quantity,
-              customizations: Array.isArray(item.customizations) 
+              customizations: Array.isArray(item.customizations)
                 ? item.customizations.map((c: any) => typeof c === 'string' ? c : String(c))
                 : (item.customizations ? [String(item.customizations)] : [])
             }));
@@ -665,7 +712,7 @@ export default function TableManagement() {
 
         // Recargar el pedido actual después de confirmar para obtener el total real del backend
         await loadCurrentOrder(selectedTableForMenu);
-        
+
         // Actualizar el total de la mesa con los datos reales del backend
         setTimeout(async () => {
           await refreshTables();
@@ -673,7 +720,7 @@ export default function TableManagement() {
 
         setCurrentView('tables');
         setSelectedTableForMenu(null);
-        
+
       } catch (error: any) {
         console.error('Error confirmando pedido:', error);
         Alert.alert('Error', 'No se pudo confirmar el pedido');
@@ -727,7 +774,7 @@ export default function TableManagement() {
                   Tiempo: {getSessionTimeWithUpdate(table.timeOccupied)}
                 </Text>
               ) : null}
-              
+
               {/* Solo mostrar el total si hay una sesión activa */}
               {table.sessionId && (
                 <View style={styles.tableTotalInfo}>
@@ -780,7 +827,7 @@ export default function TableManagement() {
           </CardContent>
         </Card>
       </TouchableOpacity>
-      
+
       {Object.entries(statusConfig).map(([status, config]) => {
         const count = statusCounts[status as TableStatus] || 0;
         return (
@@ -828,17 +875,17 @@ export default function TableManagement() {
           onPress={() => setShowAlerts(!showAlerts)}
           style={styles.alertsToggle}
         >
-          <Ionicons 
-            name={showAlerts ? "chevron-up" : "chevron-down"} 
-            size={20} 
-            color="#6b7280" 
+          <Ionicons
+            name={showAlerts ? "chevron-up" : "chevron-down"}
+            size={20}
+            color="#6b7280"
           />
         </TouchableOpacity>
       </View>
-      
+
       {showAlerts && (
-        <ScrollView 
-          style={styles.alertsList} 
+        <ScrollView
+          style={styles.alertsList}
           showsVerticalScrollIndicator={false}
           nestedScrollEnabled={true}
         >
@@ -896,9 +943,9 @@ export default function TableManagement() {
         currentDiners = 2;
       }
     }
-    
+
     const currentTable = tables.find(t => t.id === selectedTableForMenu);
-    
+
     return (
       <MenuView
         tableId={selectedTableForMenu || 0}
@@ -919,7 +966,7 @@ export default function TableManagement() {
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#f9fafb" />
-      
+
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
@@ -939,13 +986,13 @@ export default function TableManagement() {
             style={styles.refreshButton}
           />
           {user && (
-              <Button
-                title="Cerrar Sesión"
-                onPress={logout}
-                variant="outline"
-                size="sm"
-                style={styles.logoutButton}
-              />
+            <Button
+              title="Cerrar Sesión"
+              onPress={logout}
+              variant="outline"
+              size="sm"
+              style={styles.logoutButton}
+            />
           )}
         </View>
       </View>
@@ -1067,7 +1114,7 @@ export default function TableManagement() {
             {/* Acciones disponibles */}
             <View style={styles.actions}>
               <Text style={styles.actionsTitle}>Acciones disponibles:</Text>
-              
+
               {selectedTable.status === "available" && (
                 <Button
                   title="Asignar mesa"
@@ -1092,15 +1139,33 @@ export default function TableManagement() {
                     icon={<Ionicons name="create" size={16} color="#374151" />}
                     style={styles.actionButton}
                   />
-                  <Button
-                    title="Procesar pago"
-                    onPress={() => {
-                      handlePaymentRequest(selectedTable);
-                    }}
-                    variant="outline"
-                    icon={<Ionicons name="card" size={16} color="#374151" />}
-                    style={styles.actionButton}
-                  />
+
+                  {/* Botón inteligente: Pago o Cerrar mesa según el estado */}
+                  {(() => {
+                    const orderTotal = selectedTable.orderTotal || 0;
+
+                    return !orderTotal ? (
+                      <Button
+                        title="Cerrar mesa"
+                        onPress={() => {
+                          handleCloseTableManually(selectedTable.id);
+                        }}
+                        variant="outline"
+                        icon={<Ionicons name="checkmark-circle" size={16} color="#10b981" />}
+                        style={StyleSheet.flatten([styles.actionButton, styles.closeTableButton])}
+                      />
+                    ) : (
+                      <Button
+                        title="Procesar pago"
+                        onPress={() => {
+                          handlePaymentRequest(selectedTable);
+                        }}
+                        variant="outline"
+                        icon={<Ionicons name="card" size={16} color="#374151" />}
+                        style={styles.actionButton}
+                      />
+                    );
+                  })()}
                 </View>
               )}
 
@@ -1188,12 +1253,12 @@ export default function TableManagement() {
             <>
               <View style={styles.paymentInfo}>
                 <Text style={styles.modalTitle}>Mesa {selectedTable.number}</Text>
-                
+
                 {/* Información del total */}
                 <Text style={styles.paymentInfoText}>
                   <Text style={styles.paymentLabel}>Total de la cuenta:</Text> ${formatCurrency(selectedTable.orderTotal || 0)}
                 </Text>
-                
+
                 {/* Mostrar información de pagos previos solo si hay pagos */}
                 {selectedTable.paidAmount && selectedTable.paidAmount > 0 && (
                   <>
@@ -1208,8 +1273,9 @@ export default function TableManagement() {
               </View>
 
               <View style={styles.paymentOptions}>
+
                 <Text style={styles.paymentOptionsTitle}>Selecciona el tipo de pago:</Text>
-                
+
                 <TouchableOpacity
                   style={styles.fullPaymentButton}
                   onPress={handleFullPayment}
@@ -1743,5 +1809,39 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: isTablet ? 16 : 14,
     fontWeight: '600',
+  },
+  paymentMethodSelector: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 16,
+    justifyContent: 'center',
+  },
+  paymentMethodButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    backgroundColor: '#ffffff',
+    borderWidth: 2,
+    borderColor: '#d1d5db',
+    minWidth: 100,
+  },
+  selectedPaymentMethod: {
+    backgroundColor: '#3b82f6',
+    borderColor: '#3b82f6',
+  },
+  paymentMethodText: {
+    fontSize: isTablet ? 14 : 12,
+    fontWeight: '600',
+    color: '#374151',
+    marginLeft: 4,
+  },
+  selectedPaymentMethodText: {
+    color: '#ffffff',
+  },
+  closeTableButton: {
+    borderColor: '#10b981',
   },
 }); 

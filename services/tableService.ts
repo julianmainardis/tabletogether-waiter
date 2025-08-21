@@ -79,5 +79,27 @@ export const tableService = {
       startedAt: new Date(session.startedAt),
       endedAt: session.endedAt ? new Date(session.endedAt) : undefined
     }));
+  },
+
+  async closeTableManually(tableId: string): Promise<{ success: boolean; message: string }> {
+    const auth = waiterAuthService.getCurrentAuth();
+    if (!auth) {
+      throw new Error('No hay sesión activa');
+    }
+
+    const response = await fetch(`${API_BASE_URL}/admin/tables/${tableId}/close-session`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${auth.token}`,
+      },
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.message || 'Error al cerrar la mesa');
+    }
+
+    return await response.json();
   }
 }; 
