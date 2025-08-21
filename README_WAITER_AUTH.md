@@ -21,16 +21,16 @@ La app usa la siguiente configuración por defecto:
 ## 🔑 **Autenticación**
 
 ### **Endpoint**
-```
+\`\`\`
 POST /admin/auth/login
-```
+\`\`\`
 
 ### **Validación de Rol**
 - ✅ **Permitido**: Usuarios con `role: "admin"`
 - ❌ **Denegado**: Usuarios con otros roles (chef, assistant, etc.)
 
 ### **Estructura de Respuesta**
-```json
+\`\`\`json
 {
   "token": "jwt_token_here",
   "expiresAt": "2024-01-01T08:00:00.000Z",
@@ -42,7 +42,7 @@ POST /admin/auth/login
     "isActive": true
   }
 }
-```
+\`\`\`
 
 ## 👥 **Usuarios de Prueba**
 
@@ -91,7 +91,7 @@ Basado en la migración de la base de datos:
 ## 🛠️ **Uso**
 
 ### **1. Configurar API URL**
-```bash
+\`\`\`bash
 # Opción 1: Variable de entorno
 export EXPO_PUBLIC_API_URL=http://localhost:3000/api
 
@@ -99,13 +99,13 @@ export EXPO_PUBLIC_API_URL=http://localhost:3000/api
 extra: {
   apiUrl: process.env.EXPO_PUBLIC_API_URL || "http://localhost:3000/api"
 }
-```
+\`\`\`
 
 ### **2. Ejecutar la App**
-```bash
+\`\`\`bash
 npm install
 npx expo start
-```
+\`\`\`
 
 ### **3. Login**
 1. Usar credenciales de usuario `admin`
@@ -171,4 +171,4 @@ npx expo start
 - Los tipos están definidos en `types/` con un archivo de índice
 - La configuración usa `app.config.ts` para mejor tipado
 - **IMPORTANTE**: El rol correcto es `admin`, no `administrator`
-- **CREDENCIALES**: Usuario `admin`, contraseña `password` 
+- **CREDENCIALES**: Usuario `admin`, contraseña `password`

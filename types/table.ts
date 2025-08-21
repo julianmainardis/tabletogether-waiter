@@ -57,4 +57,4 @@ export interface Order {
   totalAmount: number;
   status: "active" | "completed" | "cancelled";
   timestamp: Date;
-} 
+}

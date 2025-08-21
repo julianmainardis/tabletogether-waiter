@@ -32,4 +32,4 @@ export const WaiterLoginScreen: React.FC<WaiterLoginScreenProps> = ({ onLoginSuc
       error={error || undefined}
     />
   );
-}; 
+};

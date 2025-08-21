@@ -65,7 +65,7 @@ Esta es la aplicación móvil React Native para camareros del sistema GastronFlo
 
 ## 📦 Instalación y Ejecución
 
-```bash
+\`\`\`bash
 # Instalar dependencias
 npm install
 
@@ -77,7 +77,7 @@ npm run ios
 
 # Ejecutar en iPad
 # Conectar iPad y ejecutar desde Xcode o Expo Go
-```
+\`\`\`
 
 ## 📱 Especificaciones Técnicas iPad 13 Pro
 

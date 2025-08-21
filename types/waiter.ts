@@ -10,4 +10,4 @@ export interface WaiterAuth {
   token: string;
   expiresAt: string;
   user: WaiterUser;
-} 
+}

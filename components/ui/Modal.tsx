@@ -104,4 +104,4 @@ const styles = StyleSheet.create({
   content: {
     padding: 12,
   },
-}); 
+});

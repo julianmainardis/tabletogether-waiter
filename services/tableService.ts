@@ -102,4 +102,4 @@ export const tableService = {
 
     return await response.json();
   }
-}; 
+};

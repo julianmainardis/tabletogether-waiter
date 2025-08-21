@@ -36,14 +36,10 @@ export const WaiterAuthProvider: React.FC<WaiterAuthProviderProps> = ({ children
       console.log('🔌 Inicializando alertsService para usuario autenticado');
       console.log('👤 Usuario:', user);
       
-      // Verificar que el alertsService esté conectado
-      if (!alertsService.isConnectedToServer()) {
-        console.log('🔄 Conectando alertsService...');
-        // El alertsService se inicializa automáticamente en el constructor
-        // pero podemos verificar su estado
-      }
+      // Inicializar la conexión del socket
+      alertsService.initializeSocketConnection();
       
-      console.log('📊 Estado del alertsService:', alertsService.isConnectedToServer());
+      console.log('📊 Estado del alertsService:', alertsService.getConnectionStatus());
     }
   }, [isAuthenticated, user]);
 
@@ -128,4 +124,4 @@ export const useWaiterAuth = (): WaiterAuthContextType => {
     throw new Error('useWaiterAuth must be used within a WaiterAuthProvider');
   }
   return context;
-}; 
+};
