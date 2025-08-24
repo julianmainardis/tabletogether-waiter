@@ -30,7 +30,8 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     bundler: "metro"
   },
   extra: {
-    apiUrl: process.env.EXPO_PUBLIC_API_URL || "http://localhost:3000/api"
+    apiUrl: process.env.EXPO_PUBLIC_API_URL || "https://gastron-flow-backend.vercel.app/api",
+    frontendUrl: "https://grupo-gastron-flow.vercel.app"
   },
   plugins: []
 });

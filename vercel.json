@@ -1,0 +1,12 @@
+{
+  "buildCommand": "npm run build:web",
+  "outputDirectory": "dist",
+  "framework": "expo",
+  "installCommand": "npm install",
+  "devCommand": "npm run start",
+  "functions": {
+    "app/**/*.ts": {
+      "runtime": "nodejs18.x"
+    }
+  }
+}
