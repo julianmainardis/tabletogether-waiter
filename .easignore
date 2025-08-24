@@ -12,3 +12,8 @@ web-build/
 .env
 .env.local
 .env.production
+.git/
+.gitignore
+README.md
+DEPLOY.md
+vercel.json
