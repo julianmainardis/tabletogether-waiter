@@ -9,7 +9,7 @@
     "ios": "expo start --ios --port 5001",
     "web": "expo start --web --port 5001",
     "lint": "expo lint",
-    "build:android": "eas build --platform android --profile production",
+                  "build:android": "chmod +x build.sh && ./build.sh",
     "build:ios": "eas build --platform ios --profile production",
     "build:preview": "eas build --platform all --profile preview",
                   "build:web": "npx expo export --platform web",

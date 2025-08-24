@@ -17,3 +17,5 @@ web-build/
 README.md
 DEPLOY.md
 vercel.json
+build.sh
+eas-build-pre-install.sh
