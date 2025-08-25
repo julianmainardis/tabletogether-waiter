@@ -20,7 +20,10 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   ios: {
     supportsTablet: true,
     bundleIdentifier: "com.gastronflow.mobilewaiter",
-    buildNumber: "1"
+    buildNumber: "1",
+    infoPlist: {
+      ITSAppUsesNonExemptEncryption: false
+    }
   },
   android: {
     package: "com.gastronflow.mobilewaiter",
@@ -38,14 +41,14 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     apiUrl: process.env.EXPO_PUBLIC_API_URL || "https://gastron-flow-backend.vercel.app/api",
     frontendUrl: process.env.EXPO_PUBLIC_FRONTEND_URL || "https://grupo-gastron-flow.vercel.app",
     eas: {
-      projectId: "1edfa3ff-5b7e-410f-be06-b590e00b50fa"
+      projectId: "ba34d3f9-b337-4215-9230-b453aba0b3b0"
     }
   },
-  owner: "julianmainardis",
+  owner: "jmainardis",
   eas: {
-    projectId: "1edfa3ff-5b7e-410f-be06-b590e00b50fa"
+    projectId: "ba34d3f9-b337-4215-9230-b453aba0b3b0"
   },
   plugins: [
     "expo-router"
   ]
-});
+} as any);

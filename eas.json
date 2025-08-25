@@ -14,6 +14,15 @@
         "buildType": "apk"
       }
     },
+    "simulator": {
+      "ios": {
+        "simulator": true
+      },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://gastron-flow-backend.vercel.app/api",
+        "EXPO_PUBLIC_FRONTEND_URL": "https://grupo-gastron-flow.vercel.app"
+      }
+    },
     "production": {
       "android": {
         "buildType": "apk"
