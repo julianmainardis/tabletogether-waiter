@@ -11,10 +11,12 @@
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.gastronflow.mobilewaiter"
+      "bundleIdentifier": "com.gastronflow.mobilewaiter",
+      "buildNumber": "1"
     },
     "android": {
       "package": "com.gastronflow.mobilewaiter",
+      "versionCode": 1,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
