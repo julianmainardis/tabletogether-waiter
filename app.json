@@ -14,10 +14,25 @@
       "bundleIdentifier": "com.gastronflow.mobilewaiter"
     },
     "android": {
-      "package": "com.gastronflow.mobilewaiter"
+      "package": "com.gastronflow.mobilewaiter",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#ffffff"
+      }
     },
     "plugins": [
       "expo-router"
-    ]
+    ],
+    "extra": {
+      "apiUrl": "https://gastron-flow-backend.vercel.app/api",
+      "frontendUrl": "https://grupo-gastron-flow.vercel.app",
+      "eas": {
+        "projectId": "1edfa3ff-5b7e-410f-be06-b590e00b50fa"
+      }
+    },
+    "owner": "julianmainardis",
+    "eas": {
+      "projectId": "1edfa3ff-5b7e-410f-be06-b590e00b50fa"
+    }
   }
 }

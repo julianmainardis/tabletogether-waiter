@@ -1,0 +1,18 @@
+{
+  "cli": {
+    "version": ">= 5.9.1",
+    "appVersionSource": "remote"
+  },
+  "build": {
+    "production": {
+      "android": {
+        "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://gastron-flow-backend.vercel.app/api",
+        "EXPO_PUBLIC_FRONTEND_URL": "https://grupo-gastron-flow.vercel.app"
+      },
+      "prebuildCommand": "chmod +x eas-build-pre-install.sh && ./eas-build-pre-install.sh"
+    }
+  }
+}
