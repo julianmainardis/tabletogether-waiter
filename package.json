@@ -67,7 +67,7 @@
     "geist": "^1.4.2",
     "input-otp": "latest",
     "lucide-react": "^0.454.0",
-    "metro": "^0.80.1",
+    "metro": "^0.82.5",
     "next": "15.2.4",
     "next-themes": "latest",
     "node-fetch": "^3.3.2",
