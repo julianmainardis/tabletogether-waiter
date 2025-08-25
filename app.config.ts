@@ -4,7 +4,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
   name: "Mobile Waiter",
   slug: "mobile-waiter",
-  version: "1.0.0",
+  version: "1.0.1",
   orientation: "portrait",
   icon: "./assets/icon.png",
   userInterfaceStyle: "light",
@@ -20,14 +20,14 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   ios: {
     supportsTablet: true,
     bundleIdentifier: "com.gastronflow.mobilewaiter",
-    buildNumber: "1",
+    buildNumber: "2",
     infoPlist: {
       ITSAppUsesNonExemptEncryption: false
     }
   },
   android: {
     package: "com.gastronflow.mobilewaiter",
-    versionCode: 1,
+    versionCode: 2,
     adaptiveIcon: {
       foregroundImage: "./assets/adaptive-icon.png",
       backgroundColor: "#ffffff"
@@ -38,8 +38,8 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     bundler: "metro"
   },
   extra: {
-    apiUrl: process.env.EXPO_PUBLIC_API_URL || "https://table-together-backend-production.up.railway.app",
-    frontendUrl: process.env.EXPO_PUBLIC_FRONTEND_URL || "https://table-together-client-production.up.railway.app",
+    apiUrl: process.env.EXPO_PUBLIC_API_URL || "https://gastron-flow-backend.vercel.app/api",
+    frontendUrl: process.env.EXPO_PUBLIC_FRONTEND_URL || "https://grupo-gastron-flow.vercel.app",
     eas: {
       projectId: "ba34d3f9-b337-4215-9230-b453aba0b3b0"
     }
