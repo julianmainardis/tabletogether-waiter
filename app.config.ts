@@ -9,7 +9,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   icon: "./assets/icon.png",
   userInterfaceStyle: "light",
   splash: {
-    image: "./assets/splash.png",
+    image: "./assets/icon.png",
     resizeMode: "contain",
     backgroundColor: "#ffffff"
   },
@@ -21,12 +21,12 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   },
   android: {
     adaptiveIcon: {
-      foregroundImage: "./assets/adaptive-icon.png",
+      foregroundImage: "./assets/icon.png",
       backgroundColor: "#ffffff"
     }
   },
   web: {
-    favicon: "./assets/favicon.png",
+    favicon: "./assets/icon.png",
     bundler: "metro"
   },
   extra: {
