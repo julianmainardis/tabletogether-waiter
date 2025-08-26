@@ -15,8 +15,8 @@ import { Button } from './ui/button';
 import { Card, CardContent } from './ui/card';
 import { Badge } from './ui/badge';
 import { ProductDetailDialog } from './ProductDetailDialog';
-import { productService, Product, Category } from '../services/productService';
-import { orderService } from '../services/orderService';
+import productService, { Product, Category } from '../services/productService';
+import orderService from '../services/orderService';
 
 interface MenuViewProps {
   tableId: number;

@@ -9,3 +9,4 @@ echo "Iniciando build de Android..."
 npx eas-cli@latest build --platform android --profile production --non-interactive
 
 echo "Build completado!"
+

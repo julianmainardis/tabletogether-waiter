@@ -22,11 +22,11 @@ import { Table, TableStatus, TableAlert, AlertType } from '../types/table';
 import { statusConfig, alertConfig } from '../data/mockData';
 import { useWaiterAuth } from '../contexts/WaiterAuthContext';
 import { useTables, TableStatus as RealTableStatus } from '../hooks/useTables';
-import { tableService } from '../services/tableService';
-import { alertsService } from '../services/alertsService';
-import { orderService, TableOrdersResponse } from '../services/orderService';
-import { paymentService } from '../services/paymentService';
-import { socketService } from '../services/socketService';
+import tableService from '../services/tableService';
+import alertsService from '../services/alertsService';
+import orderService, { TableOrdersResponse } from '../services/orderService';
+import paymentService from '../services/paymentService';
+import socketService from '../services/socketService';
 
 type ViewType = 'tables' | 'menu' | 'order-summary';
 

@@ -128,3 +128,4 @@ Si tienes errores de TypeScript, verificar:
 2. Para producción real, usar **EAS Build** para crear APK/IPA
 3. **Vercel** es mejor para el backend y frontend web
 4. **Expo Go** es solo para desarrollo y testing
+

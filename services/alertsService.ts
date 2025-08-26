@@ -1,7 +1,7 @@
 import { io, Socket } from 'socket.io-client';
 import Constants from 'expo-constants';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { waiterAuthService } from './waiterAuth';
+import waiterAuthService from './waiterAuth';
 
 const API_BASE_URL = Constants.expoConfig?.extra?.apiUrl || 'http://localhost:3000/api';
 const WS_BASE_URL = API_BASE_URL.replace('/api', '') || 'http://localhost:3000';
@@ -492,4 +492,5 @@ class AlertsService {
   }
 }
 
-export const alertsService = new AlertsService(); 
+const alertsService = new AlertsService();
+export default alertsService; 

@@ -1,4 +1,4 @@
-import { waiterAuthService } from './waiterAuth';
+import waiterAuthService from './waiterAuth';
 import Constants from 'expo-constants';
 
 const API_BASE_URL = Constants.expoConfig?.extra?.apiUrl || 'http://localhost:3000/api';
@@ -26,7 +26,7 @@ export interface TableSession {
   status: 'active' | 'ended';
 }
 
-export const tableService = {
+const tableService = {
   async updateTableStatus(tableId: string, updateData: UpdateTableStatusRequest): Promise<UpdateTableStatusResponse> {
     const auth = waiterAuthService.getCurrentAuth();
     if (!auth) {
@@ -103,3 +103,5 @@ export const tableService = {
     return await response.json();
   }
 };
+
+export default tableService;

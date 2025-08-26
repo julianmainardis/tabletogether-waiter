@@ -1,4 +1,4 @@
-import { waiterAuthService } from './waiterAuth';
+import waiterAuthService from './waiterAuth';
 import Constants from 'expo-constants';
 
 const API_BASE_URL = Constants.expoConfig?.extra?.apiUrl || 'http://localhost:3000/api';
@@ -29,7 +29,7 @@ export interface Category {
   description?: string;
 }
 
-export const productService = {
+const productService = {
   // Obtener todos los productos
   getProducts: async (): Promise<Product[]> => {
     try {
@@ -72,3 +72,5 @@ export const productService = {
     }
   }
 };
+
+export default productService;

@@ -1,4 +1,4 @@
-import { waiterAuthService } from './waiterAuth';
+import waiterAuthService from './waiterAuth';
 import Constants from 'expo-constants';
 
 const API_BASE_URL = Constants.expoConfig?.extra?.apiUrl || 'http://localhost:3000/api';
@@ -43,7 +43,7 @@ export interface PaymentStatusResponse {
   }>;
 }
 
-export const paymentService = {
+const paymentService = {
   // Pago de mesa (simplificado para camareros)
   async processTablePayment(tableId: string, amount: number, method: 'cash' | 'card'): Promise<ProcessPaymentResponse> {
     const auth = waiterAuthService.getCurrentAuth();
@@ -130,4 +130,6 @@ export const paymentService = {
     const method = 'card'; // Default method for legacy calls
     return this.processTablePayment(tableId, amount, method);
   }
-}; 
+};
+
+export default paymentService; 

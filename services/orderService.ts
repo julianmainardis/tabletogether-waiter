@@ -1,4 +1,4 @@
-import { waiterAuthService } from './waiterAuth';
+import waiterAuthService from './waiterAuth';
 import Constants from 'expo-constants';
 
 const API_BASE_URL = Constants.expoConfig?.extra?.apiUrl || 'http://localhost:3000/api';
@@ -100,7 +100,7 @@ export interface ModifyOrderResponse {
   };
 }
 
-export const orderService = {
+const orderService = {
   async getTableOrdersBySession(sessionId: string): Promise<TableOrdersResponse> {
     const auth = waiterAuthService.getCurrentAuth();
     if (!auth) {
@@ -227,4 +227,6 @@ export const orderService = {
       notes
     });
   }
-}; 
+};
+
+export default orderService; 
