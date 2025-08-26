@@ -41,13 +41,10 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     apiUrl: process.env.EXPO_PUBLIC_API_URL || "https://table-together-backend-production.up.railway.app",
     frontendUrl: process.env.EXPO_PUBLIC_FRONTEND_URL || "https://table-together-client-production.up.railway.app",
     eas: {
-      projectId: "ba34d3f9-b337-4215-9230-b453aba0b3b0"
+      projectId: "a06b62df-3e17-435f-8d9e-b3c18a5a15c0"
     }
   },
-  owner: "jmainardis",
-  eas: {
-    projectId: "ba34d3f9-b337-4215-9230-b453aba0b3b0"
-  },
+  owner: "jmainardishannois",
   plugins: [
     "expo-router"
   ]
