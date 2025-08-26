@@ -23,6 +23,16 @@
         "EXPO_PUBLIC_FRONTEND_URL": "https://table-together-client-production.up.railway.app/"
       }
     },
+    "development-ios": {
+      "ios": {
+        "simulator": false,
+        "distribution": "internal"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://table-together-backend-production.up.railway.app/",
+        "EXPO_PUBLIC_FRONTEND_URL": "https://table-together-client-production.up.railway.app/"
+      }
+    },
     "production": {
       "android": {
         "buildType": "apk"
@@ -31,7 +41,7 @@
         "distribution": "store"
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://table-together-backend-production.up.railway.app/",
+        "EXPO_PUBLIC_API_URL": "https://table-together-backend-production.up.railway.app",
         "EXPO_PUBLIC_FRONTEND_URL": "https://table-together-client-production.up.railway.app"
       }
     }
