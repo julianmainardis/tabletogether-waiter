@@ -19,8 +19,8 @@
         "simulator": true
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://gastron-flow-backend.vercel.app/api",
-        "EXPO_PUBLIC_FRONTEND_URL": "https://grupo-gastron-flow.vercel.app"
+        "EXPO_PUBLIC_API_URL": "https://table-together-backend-production.up.railway.app/",
+        "EXPO_PUBLIC_FRONTEND_URL": "https://table-together-client-production.up.railway.app/"
       }
     },
     "production": {
@@ -31,8 +31,8 @@
         "distribution": "store"
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://gastron-flow-backend.vercel.app/api",
-        "EXPO_PUBLIC_FRONTEND_URL": "https://grupo-gastron-flow.vercel.app"
+        "EXPO_PUBLIC_API_URL": "https://table-together-backend-production.up.railway.app/",
+        "EXPO_PUBLIC_FRONTEND_URL": "https://table-together-client-production.up.railway.app"
       }
     }
   },
