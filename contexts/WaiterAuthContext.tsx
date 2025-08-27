@@ -30,14 +30,11 @@ export const WaiterAuthProvider: React.FC<WaiterAuthProviderProps> = ({ children
     checkAuthStatus();
   }, []);
 
-  // Inicializar alertsService cuando el usuario se autentica
+  // El alertsService se inicializa automáticamente en el constructor
   useEffect(() => {
     if (isAuthenticated && user) {
-      console.log('🔌 Inicializando alertsService para usuario autenticado');
+      console.log('🔌 Usuario autenticado, alertsService ya inicializado');
       console.log('👤 Usuario:', user);
-      
-      // Inicializar la conexión del socket
-      alertsService.initializeSocketConnection();
       
       console.log('📊 Estado del alertsService:', alertsService.getConnectionStatus());
     }

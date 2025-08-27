@@ -14,6 +14,36 @@
         "buildType": "apk"
       }
     },
+    "simulator": {
+      "ios": {
+        "simulator": true
+      },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://table-together-backend-production.up.railway.app/api",
+        "EXPO_PUBLIC_FRONTEND_URL": "https://table-together-client-production.up.railway.app/"
+      }
+    },
+    "device-testing": {
+      "ios": {
+        "simulator": false,
+        "distribution": "internal",
+        "buildConfiguration": "Debug"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://table-together-backend-production.up.railway.app/api",
+        "EXPO_PUBLIC_FRONTEND_URL": "https://table-together-client-production.up.railway.app/"
+      }
+    },
+    "development-ios": {
+      "ios": {
+        "simulator": false,
+        "distribution": "internal"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://table-together-backend-production.up.railway.app/api",
+        "EXPO_PUBLIC_FRONTEND_URL": "https://table-together-client-production.up.railway.app/"
+      }
+    },
     "production": {
       "android": {
         "buildType": "apk"
@@ -22,8 +52,18 @@
         "distribution": "store"
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://gastron-flow-backend.vercel.app/api",
-        "EXPO_PUBLIC_FRONTEND_URL": "https://grupo-gastron-flow.vercel.app"
+        "EXPO_PUBLIC_API_URL": "https://table-together-backend-production.up.railway.app/api",
+        "EXPO_PUBLIC_FRONTEND_URL": "https://table-together-client-production.up.railway.app/"
+      }
+    },
+    "testing-ios": {
+      "ios": {
+        "distribution": "internal",
+        "simulator": false
+      },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://table-together-backend-production.up.railway.app/api",
+        "EXPO_PUBLIC_FRONTEND_URL": "https://table-together-client-production.up.railway.app/"
       }
     }
   },
