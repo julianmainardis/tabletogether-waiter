@@ -2,47 +2,53 @@ import { ExpoConfig, ConfigContext } from 'expo/config';
 
 export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
-  name: 'TableTogether Waiter',
-  slug: 'tabletogether-waiter',
-  version: '1.0.0',
-  orientation: 'portrait',
-  icon: './assets/icon.png',
-  userInterfaceStyle: 'light',
+  name: "Mobile Waiter",
+  slug: "mobile-waiter",
+  version: "1.0.5",
+  orientation: "portrait",
+  icon: "./assets/icon.png",
+  userInterfaceStyle: "light",
+  scheme: "mobile-waiter",
   splash: {
-    image: './assets/splash.png',
-    resizeMode: 'contain',
-    backgroundColor: '#ffffff'
+    image: "./assets/splash.png",
+    resizeMode: "contain",
+    backgroundColor: "#ffffff"
   },
   assetBundlePatterns: [
-    '**/*'
+    "**/*"
   ],
   ios: {
     supportsTablet: true,
-    bundleIdentifier: 'com.tabletogether.waiter'
-  },
-  android: {
-    adaptiveIcon: {
-      foregroundImage: './assets/adaptive-icon.png',
-      backgroundColor: '#FFFFFF'
-    },
-    package: 'com.tabletogether.waiter'
-  },
-  web: {
-    favicon: './assets/favicon.png'
-  },
-  extra: {
-    eas: {
-      projectId: 'your-project-id'
+    bundleIdentifier: "com.gastronflow.mobilewaiter",
+    buildNumber: "3",
+    infoPlist: {
+      ITSAppUsesNonExemptEncryption: false
     }
   },
-  plugins: [
-    'expo-router'
-  ],
-  experiments: {
-    typedRoutes: true
+  android: {
+    package: "com.gastronflow.mobilewaiter",
+    versionCode: 2,
+    adaptiveIcon: {
+      foregroundImage: "./assets/adaptive-icon.png",
+      backgroundColor: "#ffffff"
+    }
   },
-  // Configuración para ignorar errores de desarrollo
+  web: {
+    favicon: "./assets/favicon.png",
+    bundler: "metro"
+  },
+  extra: {
+    apiUrl: process.env.EXPO_PUBLIC_API_URL || "https://table-together-backend-production.up.railway.app/api",
+    frontendUrl: process.env.EXPO_PUBLIC_FRONTEND_URL || "https://table-together-client-production.up.railway.app/",
+    eas: {
+      projectId: "1edfa3ff-5b7e-410f-be06-b590e00b50fa"
+    }
+  },
+  owner: "julianmainardis",
+  plugins: [
+    "expo-router"
+  ],
   developmentClient: {
     silentLaunch: true
   }
-});
+} as any);
