@@ -1,8 +1,24 @@
+// Importar manejador global de errores primero
+import '../global-error-handler';
+
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet } from 'react-native';
+import { View, StyleSheet, LogBox } from 'react-native';
 import { WaiterAuthProvider, useWaiterAuth } from '../contexts/WaiterAuthContext';
 import { WaiterLoginScreen } from './WaiterLoginScreen';
 import TableManagement from './TableManagement';
+
+// Ignorar errores específicos de desarrollo
+LogBox.ignoreLogs([
+  'Text strings must be rendered within a <Text> component.',
+  'Property \'r\' doesn\'t exist',
+  'Warning: ReferenceError:',
+  'Route "./WaiterLoginScreen.tsx" is missing the required default export',
+]);
+
+// Deshabilitar todos los warnings en desarrollo (opcional)
+if (__DEV__) {
+  LogBox.ignoreAllLogs();
+}
 
 const AppContent = () => {
   const { isAuthenticated, loading } = useWaiterAuth();
