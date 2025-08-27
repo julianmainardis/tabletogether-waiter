@@ -19,7 +19,18 @@
         "simulator": true
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://table-together-backend-production.up.railway.app/",
+        "EXPO_PUBLIC_API_URL": "https://table-together-backend-production.up.railway.app/api",
+        "EXPO_PUBLIC_FRONTEND_URL": "https://table-together-client-production.up.railway.app/"
+      }
+    },
+    "device-testing": {
+      "ios": {
+        "simulator": false,
+        "distribution": "internal",
+        "buildConfiguration": "Debug"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://table-together-backend-production.up.railway.app/api",
         "EXPO_PUBLIC_FRONTEND_URL": "https://table-together-client-production.up.railway.app/"
       }
     },
@@ -29,7 +40,7 @@
         "distribution": "internal"
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://table-together-backend-production.up.railway.app/",
+        "EXPO_PUBLIC_API_URL": "https://table-together-backend-production.up.railway.app/api",
         "EXPO_PUBLIC_FRONTEND_URL": "https://table-together-client-production.up.railway.app/"
       }
     },
@@ -41,8 +52,18 @@
         "distribution": "store"
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://table-together-backend-production.up.railway.app",
-        "EXPO_PUBLIC_FRONTEND_URL": "https://table-together-client-production.up.railway.app"
+        "EXPO_PUBLIC_API_URL": "https://table-together-backend-production.up.railway.app/api",
+        "EXPO_PUBLIC_FRONTEND_URL": "https://table-together-client-production.up.railway.app/"
+      }
+    },
+    "testing-ios": {
+      "ios": {
+        "distribution": "internal",
+        "simulator": false
+      },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://table-together-backend-production.up.railway.app/api",
+        "EXPO_PUBLIC_FRONTEND_URL": "https://table-together-client-production.up.railway.app/"
       }
     }
   },

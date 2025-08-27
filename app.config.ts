@@ -4,7 +4,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
   name: "Mobile Waiter",
   slug: "mobile-waiter",
-  version: "1.0.2",
+  version: "1.0.4",
   orientation: "portrait",
   icon: "./assets/icon.png",
   userInterfaceStyle: "light",
@@ -38,13 +38,13 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     bundler: "metro"
   },
   extra: {
-    apiUrl: process.env.EXPO_PUBLIC_API_URL || "https://table-together-backend-production.up.railway.app",
-    frontendUrl: process.env.EXPO_PUBLIC_FRONTEND_URL || "https://table-together-client-production.up.railway.app",
+    apiUrl: process.env.EXPO_PUBLIC_API_URL || "https://table-together-backend-production.up.railway.app/api",
+    frontendUrl: process.env.EXPO_PUBLIC_FRONTEND_URL || "https://table-together-client-production.up.railway.app/",
     eas: {
-      projectId: "a06b62df-3e17-435f-8d9e-b3c18a5a15c0"
+      projectId: "1edfa3ff-5b7e-410f-be06-b590e00b50fa"
     }
   },
-  owner: "jmainardishannois",
+  owner: "julianmainardis",
   plugins: [
     "expo-router"
   ]
